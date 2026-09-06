@@ -70,7 +70,7 @@ export const QUESTION_TEMPLATES: QuestionTemplateDefinition[] = [
       const constForce = deposit * Math.exp(a * t);
 
       return {
-        questionText: `An investor deposits $\\$${deposit.toLocaleString()}$ into an account at time $t = 0$. The force of interest at time $t$ is given by:
+        questionText: `An investor deposits $${deposit.toLocaleString()} into an account at time $t = 0$. The force of interest at time $t$ is given by:
 $$\\delta(t) = ${a} + ${b}t$$
 Calculate the accumulated value in the account at time $t = ${t}$.`,
         variables: { deposit, a, b, t },
@@ -136,7 +136,7 @@ $$A(${t}) = ${deposit} \\cdot e^{${integral.toFixed(5)}} = \\$${correctVal.toFix
       const directDist = 1 - Math.pow(1 - d_p / p, p);
 
       return {
-        questionText: `An account earns interest at a nominal discount rate of $${(d_p * 100).toFixed(2)}\\%$ compounded ${freqName}. 
+        questionText: `An account earns interest at a nominal discount rate of ${(d_p * 100).toFixed(2)}% compounded ${freqName}. 
 Calculate the equivalent annual effective rate of interest $i$.`,
         variables: { d_p, p, freqName },
         correctValue: i_eff * 100,
@@ -149,7 +149,7 @@ Calculate the equivalent annual effective rate of interest $i$.`,
           {
             value: simpleDiscount * 100,
             type: "SIMPLE_INTEREST_ERROR",
-            explanation: "Applied the annual formula $i = d / (1 - d)$ without accounting for the compounding frequency $p = " + p + "$.",
+            explanation: `Applied the annual formula $i = d / (1 - d)$ without accounting for compounding frequency $p = ${p}$.`,
           },
           {
             value: linearDist * 100,
@@ -200,7 +200,7 @@ $$i = \\frac{1}{${v_ann.toFixed(6)}} - 1 = ${(i_eff * 100).toFixed(2)}\\%$$`,
       const noInterest = c1 + c2;
 
       return {
-        questionText: `Payments of $\\$${c1.toLocaleString()}$ at time $t = ${t1}$ and $\\$${c2.toLocaleString()}$ at time $t = ${t2}$ are deposited into a fund earning an annual effective interest rate of $${(i * 100).toFixed(2)}\\%$. 
+        questionText: `Payments of $${c1.toLocaleString()} at time $t = ${t1}$ and $${c2.toLocaleString()} at time $t = ${t2}$ are deposited into a fund earning an annual effective interest rate of ${(i * 100).toFixed(2)}%. 
 Determine the accumulated value of these payments at time $t = ${tTarget}$.`,
         variables: { i, c1, t1, c2, t2, tTarget },
         correctValue: correctVal,
@@ -218,7 +218,7 @@ Determine the accumulated value of these payments at time $t = ${tTarget}$.`,
           {
             value: discountedVal,
             type: "CALCULATION_DISTRACTOR",
-            explanation: "Discounted payments backwards in time instead of accumulating forwards to time $t = " + tTarget + "$.",
+            explanation: `Discounted payments backwards in time instead of accumulating forwards to time $t = ${tTarget}$.`,
           },
           {
             value: noInterest,
@@ -256,7 +256,7 @@ $$= \\$${correctVal.toFixed(2)}$$`,
 
       // Distractor 1: Annuity due (confusing immediate with due, factor (1+i))
       const annuityDueVal = pmt * ActuarialMath.annuityDue(n, i);
-      // Distractor 2: simple interest annuity pv: pmt * sum(1 / (1 + k*i))
+      // Distractor 2: simple interest annuity pv
       let simpleAnnuity = 0;
       for (let k = 1; k <= n; k++) {
         simpleAnnuity += pmt / (1 + k * i);
@@ -267,7 +267,7 @@ $$= \\$${correctVal.toFixed(2)}$$`,
       const undiscounted = pmt * n;
 
       return {
-        questionText: `An annuity pays $\\$${pmt.toLocaleString()}$ at the end of each year for $${n}$ years. The annual effective interest rate is $${(i * 100).toFixed(2)}\\%$. 
+        questionText: `An annuity pays $${pmt.toLocaleString()} at the end of each year for ${n} years. The annual effective interest rate is ${(i * 100).toFixed(2)}%. 
 Calculate the present value of this annuity.`,
         variables: { pmt, n, i },
         correctValue: correctVal,
@@ -321,7 +321,7 @@ $$PV = ${pmt} \\cdot ${ActuarialMath.annuityImmediate(n, i).toFixed(4)} = \\$${c
       const ia = ActuarialMath.increasingAnnuityImmediate(n, i);
       const correctVal = base * ia;
 
-      // Distractor 1: using a_immediate instead of a_due in the numerator: (a - n*v^n)/i
+      // Distractor 1: using a_immediate instead of a_due in the numerator
       const v = ActuarialMath.v(i);
       const aImm = ActuarialMath.annuityImmediate(n, i);
       const dist1 = base * ((aImm - n * Math.pow(v, n)) / i);
@@ -336,8 +336,8 @@ $$PV = ${pmt} \\cdot ${ActuarialMath.annuityImmediate(n, i).toFixed(4)} = \\$${c
       const dist4 = ((base * (n + 1)) / 2) * aImm;
 
       return {
-        questionText: `An annuity provides payments at the end of each year for $${n}$ years. The payment at the end of year $t$ is $\\$${base} \\cdot t$ (i.e., $\\$${base}$ at $t=1$, $\\$${2 * base}$ at $t=2$, ..., $\\$${n * base}$ at $t=${n}$). 
-The annual effective interest rate is $${(i * 100).toFixed(2)}\\%$. 
+        questionText: `An annuity provides payments at the end of each year for ${n} years. The payment at the end of year $t$ is $${base}t (i.e., $${base} at $t=1$, $${2 * base} at $t=2$, ..., $${n * base} at $t=${n}$). 
+The annual effective interest rate is ${(i * 100).toFixed(2)}%. 
 Calculate the present value of this increasing annuity.`,
         variables: { base, n, i },
         correctValue: correctVal,
@@ -400,8 +400,8 @@ $$PV = ${base} \\times ${ia.toFixed(4)} = \\$${correctVal.toFixed(2)}$$`,
       const dist4 = p1 / g;
 
       return {
-        questionText: `A perpetuity pays $\\$${p1.toLocaleString()}$ at the end of the first year. Each subsequent annual payment is $${(g * 100).toFixed(2)}\\%$ greater than the previous payment. 
-The annual effective interest rate is $${(i * 100).toFixed(2)}\\%$. 
+        questionText: `A perpetuity pays $${p1.toLocaleString()} at the end of the first year. Each subsequent annual payment is ${(g * 100).toFixed(2)}% greater than the previous payment. 
+The annual effective interest rate is ${(i * 100).toFixed(2)}%. 
 Calculate the present value of this geometrically increasing perpetuity.`,
         variables: { p1, g, i },
         correctValue: correctVal,
@@ -468,8 +468,8 @@ $$PV = \\frac{${p1}}{${i} - ${g}} = \\frac{${p1}}{${(i - g).toFixed(4)}} = \\$${
       const dist4 = ActuarialMath.loanPayment(loanAmount, (nYears - 1) * m, j);
 
       return {
-        questionText: `A borrower takes out a $\\$${loanAmount.toLocaleString()}$ loan to be repaid with equal monthly payments at the end of each month over $${nYears}$ years. 
-The interest rate on the loan is a nominal annual rate of $${(iNominal * 100).toFixed(2)}\\%$ compounded monthly. 
+        questionText: `A borrower takes out a $${loanAmount.toLocaleString()} loan to be repaid with equal monthly payments at the end of each month over ${nYears} years. 
+The interest rate on the loan is a nominal annual rate of ${(iNominal * 100).toFixed(2)}% compounded monthly. 
 Calculate the monthly loan payment.`,
         variables: { loanAmount, nYears, iNominal, m, totalPayments, j },
         correctValue: pmt,
@@ -487,7 +487,7 @@ Calculate the monthly loan payment.`,
           {
             value: dist4,
             type: "OFF_BY_ONE_PERIOD",
-            explanation: `Amortized over $${nYears - 1}$ years ($${(nYears - 1) * m}$ payments) instead of $${nYears}$ years ($${totalPayments}$ payments).`,
+            explanation: `Amortized over ${nYears - 1} years (${(nYears - 1) * m} payments) instead of ${nYears} years (${totalPayments} payments).`,
           },
           {
             value: dist2,
@@ -536,7 +536,7 @@ $$R = \\frac{\\$${loanAmount.toLocaleString()}}{${ActuarialMath.annuityImmediate
       const dist4 = loanAmount - t * pmt;
 
       return {
-        questionText: `A loan of $\\$${loanAmount.toLocaleString()}$ is repaid with equal annual payments at the end of each year for $${n}$ years at an annual effective interest rate of $${(i * 100).toFixed(2)}\\%$. 
+        questionText: `A loan of $${loanAmount.toLocaleString()} is repaid with equal annual payments at the end of each year for ${n} years at an annual effective interest rate of ${(i * 100).toFixed(2)}%. 
 Calculate the outstanding loan balance immediately after the $${t}^{\\text{th}}$ payment is made.`,
         variables: { loanAmount, n, i, t, pmt },
         correctValue: balance,
@@ -605,7 +605,7 @@ $$B_{${t}} = ${pmt.toFixed(2)} \\times ${ActuarialMath.annuityImmediate(n - t, i
       const dist4 = loanAmount / n;
 
       return {
-        questionText: `A loan of $\\$${loanAmount.toLocaleString()}$ is amortized over $${n}$ years with level annual payments at an annual effective interest rate of $${(i * 100).toFixed(2)}\\%$. 
+        questionText: `A loan of $${loanAmount.toLocaleString()} is amortized over ${n} years with level annual payments at an annual effective interest rate of ${(i * 100).toFixed(2)}%. 
 Determine the amount of principal repaid in the $${t}^{\\text{th}}$ payment.`,
         variables: { loanAmount, n, i, t, pmt },
         correctValue: correctVal,
@@ -671,7 +671,7 @@ $$P_{${t}} = ${pmt.toFixed(2)} \\times ${Math.pow(1 / (1 + i), n - t + 1).toFixe
 
       // Distractor 1: Annual compounding mistake: using nYears instead of nPeriods
       const dist1 = ActuarialMath.bondPrice(par, rNominal, yNominal, par, nYears);
-      // Distractor 2: Annuity Due on coupons (coupons at beginning of period)
+      // Distractor 2: Annuity Due on coupons
       const aDue = ActuarialMath.annuityDue(nPeriods, y);
       const dist2 = coupon * aDue + par * Math.pow(1 + y, -nPeriods);
       // Distractor 3: Off by one period: nPeriods - 1
@@ -680,8 +680,8 @@ $$P_{${t}} = ${pmt.toFixed(2)} \\times ${Math.pow(1 / (1 + i), n - t + 1).toFixe
       const dist4 = (par + coupon * nPeriods) / (1 + yNominal * nYears);
 
       return {
-        questionText: `A $${nYears}$-year bond with a par value of $\\$${par.toLocaleString()}$ pays semiannual coupons at a nominal annual rate of $${(rNominal * 100).toFixed(2)}\\%$. 
-The bond is redeemable at par and bought to yield a nominal annual rate of $${(yNominal * 100).toFixed(2)}\\%$ compounded semiannually. 
+        questionText: `A ${nYears}-year bond with a par value of $${par.toLocaleString()} pays semiannual coupons at a nominal annual rate of ${(rNominal * 100).toFixed(2)}%. 
+The bond is redeemable at par and bought to yield a nominal annual rate of ${(yNominal * 100).toFixed(2)}% compounded semiannually. 
 Calculate the price of the bond.`,
         variables: { par, nYears, rNominal, yNominal, nPeriods, r, y, coupon },
         correctValue: price,
@@ -689,7 +689,7 @@ Calculate the price of the bond.`,
           {
             value: dist1,
             type: "NOMINAL_RATE_ERROR",
-            explanation: "Priced the bond with annual periods $n = " + nYears + "$ instead of semiannual periods $2n = " + nPeriods + "$.",
+            explanation: `Priced the bond with annual periods $n = ${nYears}$ instead of semiannual periods $2n = ${nPeriods}$.`,
           },
           {
             value: dist2,
@@ -699,7 +699,7 @@ Calculate the price of the bond.`,
           {
             value: dist3,
             type: "OFF_BY_ONE_PERIOD",
-            explanation: `Computed price for $${nPeriods - 1}$ periods instead of $${nPeriods}$ periods.`,
+            explanation: `Computed price for ${nPeriods - 1} periods instead of ${nPeriods} periods.`,
           },
           {
             value: dist4,
@@ -746,11 +746,8 @@ $$P = \\$${price.toFixed(2)}$$`,
       const coupon = par * r;
       const t = randInt(3, n - 4);
 
-      // Book value at period t: B_t = Fr * a_{n-t} + C * v^{n-t}
-      const bookValue_t = ActuarialMath.bondBookValue(par, r, y, par, n, t);
-      // Write-down of premium in period t: P_t = Fr - y * B_{t-1} = (Fr - Cy) * v^{n-t+1}
+      // Book value at period t
       const writeDown = (coupon - par * y) * Math.pow(1 + y, -(n - t + 1));
-
       const correctVal = writeDown;
 
       // Distractor 1: write-down at t+1 (off by one)
@@ -764,8 +761,8 @@ $$P = \\$${price.toFixed(2)}$$`,
       const dist4 = (initialPrice - par) / n;
 
       return {
-        questionText: `A $${nYears}$-year bond with par value $\\$${par}$ pays semiannual coupons at a nominal rate of $${(rNominal * 100).toFixed(2)}\\%$ compounded semiannually. 
-The bond is purchased at premium to yield a nominal annual rate of $${(yNominal * 100).toFixed(2)}\\%$ compounded semiannually. 
+        questionText: `A ${nYears}-year bond with par value $${par} pays semiannual coupons at a nominal rate of ${(rNominal * 100).toFixed(2)}% compounded semiannually. 
+The bond is purchased at premium to yield a nominal annual rate of ${(yNominal * 100).toFixed(2)}% compounded semiannually. 
 Calculate the amount of premium written down in the $${t}^{\\text{th}}$ coupon payment.`,
         variables: { par, nYears, rNominal, yNominal, n, t, coupon, y },
         correctValue: correctVal,
@@ -822,7 +819,6 @@ $$p_{${t}} = ${(coupon - par * y).toFixed(4)} \\times ${Math.pow(1 + y, -(n - t 
       const r = randFloat(0.07, 0.09, 3); // annual coupon
       const y = randFloat(0.04, 0.06, 3); // premium bond: r > y
 
-      // For a bond bought at premium (r > y), the worst-case scenario that guarantees yield y is earliest redemption date!
       const coupon = par * r;
       const priceCall = ActuarialMath.bondPrice(par, r, y, par, callYear1);
       const priceMaturity = ActuarialMath.bondPrice(par, r, y, par, maturityYear);
@@ -830,7 +826,7 @@ $$p_{${t}} = ${(coupon - par * y).toFixed(4)} \\times ${Math.pow(1 + y, -(n - t 
       // Investor must pay lowest price to guarantee yield
       const correctVal = Math.min(priceCall, priceMaturity);
 
-      // Distractor 1: Price assuming maturity (worst case for discount, but this is premium)
+      // Distractor 1: Price assuming maturity
       const dist1 = Math.max(priceCall, priceMaturity);
       // Distractor 2: Average of the two prices
       const dist2 = (priceCall + priceMaturity) / 2;
@@ -840,9 +836,9 @@ $$p_{${t}} = ${(coupon - par * y).toFixed(4)} \\times ${Math.pow(1 + y, -(n - t 
       const dist4 = par;
 
       return {
-        questionText: `A $\\$${par}$ par value bond with annual coupons at an effective annual rate of $${(r * 100).toFixed(2)}\\%$ matures at par in $${maturityYear}$ years. 
-The bond is callable at par at the end of year $${callYear1}$ or at any subsequent coupon date up to maturity. 
-An investor purchases the bond to guarantee an annual effective yield rate of at least $${(y * 100).toFixed(2)}\\%$. 
+        questionText: `A $${par} par value bond with annual coupons at an effective annual rate of ${(r * 100).toFixed(2)}% matures at par in ${maturityYear} years. 
+The bond is callable at par at the end of year ${callYear1} or at any subsequent coupon date up to maturity. 
+An investor purchases the bond to guarantee an annual effective yield rate of at least ${(y * 100).toFixed(2)}%. 
 Calculate the maximum purchase price the investor should pay.`,
         variables: { par, callYear1, maturityYear, r, y, coupon },
         correctValue: correctVal,
@@ -865,7 +861,7 @@ Calculate the maximum purchase price the investor should pay.`,
           {
             value: dist4,
             type: "NOMINAL_RATE_ERROR",
-            explanation: "Assumed the bond is purchased at par $\\$1000$.",
+            explanation: "Assumed the bond is purchased at par $1,000.",
           },
         ],
         format: "CURRENCY",
@@ -875,7 +871,7 @@ Therefore, this is a **premium bond**.
 
 **Step 2: Actuarial Rule for Callable Bonds:**
 - For a premium bond ($r > y$), the investor's minimum yield occurs if the bond is called at the **earliest possible date** ($n = ${callYear1}$ years).
-- To guarantee a yield of at least $${(y * 100).toFixed(2)}\\%$, the investor must pay no more than the price based on redemption at $t = ${callYear1}$.
+- To guarantee a yield of at least ${(y * 100).toFixed(2)}%, the investor must pay no more than the price based on redemption at $t = ${callYear1}$.
 
 **Step 3: Calculate price at earliest call date $n = ${callYear1}$:**
 $$P = Fr \\cdot a_{\\overline{${callYear1}}|${y}} + C \\cdot v^{${callYear1}}$$
@@ -906,7 +902,7 @@ $$P = \\$${correctVal.toFixed(2)}$$`,
       const dist1 = dMac / (1 + y);
       // Distractor 2: Maturity n (zero coupon duration)
       const dist2 = n;
-      // Distractor 3: Simple weighted average without discounting: sum(t * Ct) / sum(Ct)
+      // Distractor 3: Simple weighted average without discounting
       const coupon = par * r;
       let numNoDisc = 0;
       let denNoDisc = 0;
@@ -920,8 +916,8 @@ $$P = \\$${correctVal.toFixed(2)}$$`,
       const dist4 = dMac - 1;
 
       return {
-        questionText: `A $${n}$-year bond with par value $\\$${par}$ pays annual coupons of $${(r * 100).toFixed(2)}\\%$ and is redeemed at par. 
-The annual effective yield rate is $${(y * 100).toFixed(2)}\\%$. 
+        questionText: `A ${n}-year bond with par value $${par} pays annual coupons of ${(r * 100).toFixed(2)}% and is redeemed at par. 
+The annual effective yield rate is ${(y * 100).toFixed(2)}%. 
 Calculate the Macaulay duration of the bond (in years).`,
         variables: { par, n, r, y, dMac },
         correctValue: correctVal,
@@ -934,7 +930,7 @@ Calculate the Macaulay duration of the bond (in years).`,
           {
             value: dist2,
             type: "NOMINAL_RATE_ERROR",
-            explanation: "Equated duration to bond maturity $n = " + n + "$, which is only true for a zero-coupon bond.",
+            explanation: `Equated duration to bond maturity $n = ${n}$, which is only true for a zero-coupon bond.`,
           },
           {
             value: dist3,
@@ -952,7 +948,7 @@ Calculate the Macaulay duration of the bond (in years).`,
 $$D_{\\text{mac}} = \\frac{\\sum_{t=1}^n t \\cdot C_t \\cdot v^t}{\\sum_{t=1}^n C_t \\cdot v^t} = \\frac{\\sum t \\cdot C_t \\cdot v^t}{P}$$
 
 **Step 2: List cash flows and present values ($y = ${y}$, $v = ${(1 / (1 + y)).toFixed(4)}$):**
-Coupons are $\\$${(par * r).toFixed(2)}$ at $t=1,\\dots,${n - 1}$, and $\\$${(par * r + par).toFixed(2)}$ at $t=${n}$.
+Coupons are $${(par * r).toFixed(2)} at $t=1,\\dots,${n - 1}$, and $${(par * r + par).toFixed(2)} at $t=${n}$.
 
 **Step 3: Evaluate numerator and denominator:**
 Numerator $\\sum t \\cdot C_t \\cdot v^t = ${(dMac * ActuarialMath.bondPrice(par, r, y, par, n)).toFixed(2)}$
@@ -970,23 +966,16 @@ $$D_{\\text{mac}} = \\frac{${(dMac * ActuarialMath.bondPrice(par, r, y, par, n))
     domain: "ALM_IMMUNIZATION",
     title: "Redington Immunization Asset Allocation",
     generate: () => {
-      // Liability of L due at time tL
       const tL = randChoice([6, 8, 10]);
       const L = randInt(10, 30) * 10000;
       const y = randFloat(0.05, 0.08, 3);
-      // Assets: 1-year zero and 15-year zero
       const t1 = randInt(1, 3);
       const t2 = randInt(tL + 2, 16);
 
       const vL = L * Math.pow(1 + y, -tL);
-      // Let A1 be PV of asset 1, A2 be PV of asset 2
-      // A1 + A2 = vL
-      // t1 * A1 + t2 * A2 = tL * vL
-      // A1 (t1 - t2) = vL (tL - t2) => A1 = vL * (t2 - tL) / (t2 - t1)
       const A1_pv = (vL * (t2 - tL)) / (t2 - t1);
       const A2_pv = vL - A1_pv;
 
-      // Ask for nominal cash flow of asset 1 at time t1: A1_cf = A1_pv * (1+y)^t1
       const A1_cf = A1_pv * Math.pow(1 + y, t1);
       const correctVal = A1_cf;
 
@@ -994,14 +983,14 @@ $$D_{\\text{mac}} = \\frac{${(dMac * ActuarialMath.bondPrice(par, r, y, par, n))
       const dist1 = A1_pv;
       // Distractor 2: Nominal cash flow of asset 2
       const dist2 = A2_pv * Math.pow(1 + y, t2);
-      // Distractor 3: Undiscounted linear allocation: L * (t2 - tL) / (t2 - t1)
+      // Distractor 3: Undiscounted linear allocation
       const dist3 = (L * (t2 - tL)) / (t2 - t1);
       // Distractor 4: Equal cash flow split L / 2
       const dist4 = L / 2;
 
       return {
-        questionText: `An insurer has a single liability of $\\$${L.toLocaleString()}$ due at time $t = ${tL}$. 
-The current annual effective interest rate is $${(y * 100).toFixed(2)}\\%$. 
+        questionText: `An insurer has a single liability of $${L.toLocaleString()} due at time $t = ${tL}$. 
+The current annual effective interest rate is ${(y * 100).toFixed(2)}%. 
 To Redington immunize this liability, the insurer purchases zero-coupon bonds maturing at time $t = ${t1}$ and time $t = ${t2}$. 
 Calculate the maturity value (nominal payout) of the zero-coupon bond maturing at time $t = ${t1}$.`,
         variables: { tL, L, y, t1, t2, A1_pv, A2_pv, A1_cf },
@@ -1010,7 +999,7 @@ Calculate the maturity value (nominal payout) of the zero-coupon bond maturing a
           {
             value: dist1,
             type: "CALCULATION_DISTRACTOR",
-            explanation: "Calculated the present value of the asset $PV(A_1)$ instead of its nominal cash flow payment at maturity $A_1 = PV(A_1)(1+y)^{" + t1 + "}$.",
+            explanation: `Calculated the present value of the asset $PV(A_1)$ instead of its nominal cash flow payment at maturity $A_1 = PV(A_1)(1+y)^{${t1}}$.`,
           },
           {
             value: dist2,
@@ -1067,18 +1056,18 @@ $$C_1 = PV(A_1) \\cdot (1 + ${y})^{${t1}} = ${A1_pv.toFixed(2)} \\cdot ${(Math.p
 
       const correctVal = newPrice;
 
-      // Distractor 1: Wrong direction (adding when rate increases or vice versa)
+      // Distractor 1: Wrong direction
       const dist1 = price - deltaP;
-      // Distractor 2: Using Macaulay duration approximation without (1+y) if not adjusted
+      // Distractor 2: Using Macaulay duration approximation
       const dist2 = price * (1 - sign * (dMod * 1.05) * deltaY);
-      // Distractor 3: Forgetting to multiply by price (just deltaP in dollars as price)
+      // Distractor 3: Forgetting to multiply by price
       const dist3 = Math.abs(deltaP);
-      // Distractor 4: Percentage error (treating bps as percent)
+      // Distractor 4: Percentage error
       const dist4 = price * (1 - sign * dMod * (deltaBps / 100));
 
       return {
-        questionText: `A portfolio of bonds currently has a market value of $\\$${price.toFixed(2)}$ and a modified duration of $${dMod.toFixed(2)}$ years. 
-If the annual yield to maturity ${direction} by $${deltaBps}$ basis points, estimate the new market value of the portfolio using the first-order modified duration approximation.`,
+        questionText: `A portfolio of bonds currently has a market value of $${price.toFixed(2)} and a modified duration of ${dMod.toFixed(2)} years. 
+If the annual yield to maturity ${direction} by ${deltaBps} basis points, estimate the new market value of the portfolio using the first-order modified duration approximation.`,
         variables: { price, dMod, deltaBps, deltaY, direction, sign },
         correctValue: correctVal,
         distractors: [

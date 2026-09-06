@@ -10,9 +10,9 @@ function formatValue(value: number, format: string): string {
   if (isNaN(value) || !isFinite(value)) return "0.00";
   switch (format) {
     case "CURRENCY":
-      return `\\$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     case "PERCENT":
-      return `${value.toFixed(2)}\\%`;
+      return `${value.toFixed(2)}%`;
     case "YEARS":
       return `${value.toFixed(2)} years`;
     case "DECIMAL_4":
