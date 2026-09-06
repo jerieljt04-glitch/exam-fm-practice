@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="h-full bg-slate-900">
       <head>
         <link
           rel="stylesheet"
@@ -21,7 +22,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+      <body className="min-h-full bg-slate-900 text-slate-100 font-sans antialiased flex flex-col selection:bg-blue-600 selection:text-white">
         {children}
       </body>
     </html>
