@@ -1,23 +1,19 @@
 import { NextResponse } from "next/server";
 import { examRepository } from "@/lib/db";
 
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await examRepository.getExamSession(params.id);
-    if (!session) {
-      return NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
-    }
+export const dynamic = "force-dynamic";
 
-    // Submit if not completed, or compile review
-    const reviewData = await examRepository.submitExam(params.id);
-    return NextResponse.json({ success: true, review: reviewData });
-  } catch (error: any) {
-    console.error("Error fetching review data:", error);
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  try {
+    const review = await examRepository.getReviewData(params.id);
+    if (!review) {
+      return NextResponse.json({ success: false, error: "Exam session not found" }, { status: 404 });
+    }
+    return NextResponse.json({ success: true, review });
+  } catch (error) {
+    console.error("Error building review data:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch review data" },
+      { success: false, error: "Failed to build the review report" },
       { status: 500 }
     );
   }

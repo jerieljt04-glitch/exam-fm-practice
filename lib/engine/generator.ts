@@ -1,20 +1,45 @@
-import { TopicDomain, RenderedOption, ExamQuestionData } from "../types/exam";
-import { QUESTION_TEMPLATES, QuestionTemplateDefinition } from "./templates";
+import {
+  DOMAIN_ORDER,
+  EXAM_TOTAL_QUESTIONS,
+  OPTION_KEYS,
+  QUESTIONS_PER_DOMAIN,
+  type OptionKey,
+} from "../exam-config";
+import type { ExamQuestionData, RenderedOption } from "../types/exam";
+import { money, num } from "./format";
+import { createRng, type Rng } from "./random";
+import { QUESTION_TEMPLATES, TEMPLATES_BY_DOMAIN, getTemplateById } from "./templates";
+import type { AnswerFormat, QuestionTemplateDefinition } from "./templates/types";
+import { solutionVideoUrl } from "./video-library";
 
 export interface GenerateExamOptions {
   sessionId: string;
-  totalQuestions?: number; // default 30
+  totalQuestions?: number;
+  /**
+   * Root seed for the exam. Supplying one makes the whole exam reproducible;
+   * omitting it draws a fresh random seed, which is returned on each question
+   * so the exam can be regenerated later from persisted state.
+   */
+  seed?: string;
 }
 
-function formatValue(value: number, format: string): string {
-  if (isNaN(value) || !isFinite(value)) return "0.00";
+/** Key under which each question stores the seed that produced its parameters. */
+export const SEED_VARIABLE_KEY = "_seed";
+
+/**
+ * Renders a numeric answer into option text.
+ * Currency is escaped (`\$`) so the markup tokenizer never reads a price as a
+ * math delimiter — see `lib/math/markup.ts`.
+ */
+export function formatAnswer(value: number, format: AnswerFormat): string {
+  if (!Number.isFinite(value)) return "Not determinable";
   switch (format) {
     case "CURRENCY":
-      return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return money(value, 2);
     case "PERCENT":
       return `${value.toFixed(2)}%`;
     case "YEARS":
-      return `${value.toFixed(2)} years`;
+      return `${num(value, 2)} years`;
     case "DECIMAL_4":
       return value.toFixed(4);
     case "DECIMAL_2":
@@ -23,167 +48,181 @@ function formatValue(value: number, format: string): string {
   }
 }
 
-// Shuffles array in-place
-function shuffle<T>(array: T[]): T[] {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
+interface CandidateOption {
+  text: string;
+  value: number;
+  isCorrect: boolean;
+  distractorType: RenderedOption["distractorType"];
+  explanation: string;
 }
 
 export class QuestionGenerator {
-  private templates: QuestionTemplateDefinition[];
+  private readonly templates: QuestionTemplateDefinition[];
 
   constructor(templates: QuestionTemplateDefinition[] = QUESTION_TEMPLATES) {
     this.templates = templates;
   }
 
   /**
-   * Generates a single concrete question from a template definition
+   * Builds one concrete question from a template and a seed.
+   *
+   * The seed is stored on the question, so calling this again with the same
+   * template and seed reproduces byte-identical text, options and solution —
+   * which is how a persisted question recovers its worked solution.
    */
-  public generateSingleQuestion(
+  public generateQuestion(
     template: QuestionTemplateDefinition,
-    examSessionId: string,
-    index: number
+    options: { examSessionId: string; questionNumber: number; seed: string }
   ): ExamQuestionData {
-    const generated = template.generate();
+    const { examSessionId, questionNumber, seed } = options;
+    const rng: Rng = createRng(seed);
+    const generated = template.generate(rng);
 
-    // Prepare raw candidate options: 1 correct + 4 distractors
-    const rawOptions: {
-      text: string;
-      rawVal: number;
-      isCorrect: boolean;
-      distractorType: any;
-      explanation: string;
-    }[] = [
+    const candidates: CandidateOption[] = [
       {
-        text: formatValue(generated.correctValue, generated.format),
-        rawVal: generated.correctValue,
+        text: formatAnswer(generated.correctValue, generated.format),
+        value: generated.correctValue,
         isCorrect: true,
         distractorType: "CORRECT",
-        explanation: "Correct answer mathematically derived from first actuarial principles.",
+        explanation: "Derived directly from the governing equation of value.",
       },
     ];
 
-    const usedTexts = new Set<string>([rawOptions[0].text]);
+    const usedTexts = new Set<string>([candidates[0].text]);
 
-    // Add distractors ensuring uniqueness
-    for (const d of generated.distractors) {
-      let candidateVal = d.value;
-      let text = formatValue(candidateVal, generated.format);
+    for (const item of generated.distractors) {
+      if (candidates.length >= OPTION_KEYS.length) break;
+      if (!Number.isFinite(item.value)) continue;
 
-      // Perturb if collision occurs
-      let attempts = 0;
-      while ((usedTexts.has(text) || Math.abs(candidateVal - generated.correctValue) < 1e-4) && attempts < 10) {
-        attempts++;
-        const factor = attempts % 2 === 0 ? 1 + 0.03 * attempts : 1 - 0.03 * attempts;
-        candidateVal = d.value * factor;
-        text = formatValue(candidateVal, generated.format);
+      let value = item.value;
+      let text = formatAnswer(value, generated.format);
+
+      // Nudge a distractor that collides with an option already on the paper.
+      // Five visibly distinct choices are required on every question.
+      let attempt = 0;
+      while ((usedTexts.has(text) || value === generated.correctValue) && attempt < 12) {
+        attempt += 1;
+        const factor = attempt % 2 === 0 ? 1 + 0.035 * attempt : 1 - 0.035 * attempt;
+        value = item.value * factor;
+        text = formatAnswer(value, generated.format);
       }
+      if (usedTexts.has(text)) continue;
 
       usedTexts.add(text);
-      rawOptions.push({
+      candidates.push({
         text,
-        rawVal: candidateVal,
+        value,
         isCorrect: false,
-        distractorType: d.type,
-        explanation: d.explanation,
+        distractorType: item.type,
+        explanation: item.explanation,
       });
     }
 
-    // Ensure we have exactly 5 options
-    while (rawOptions.length < 5) {
-      const fallbackVal = generated.correctValue * (1 + (rawOptions.length % 2 === 0 ? 0.05 : -0.05) * rawOptions.length);
-      const text = formatValue(fallbackVal, generated.format);
-      if (!usedTexts.has(text)) {
-        usedTexts.add(text);
-        rawOptions.push({
-          text,
-          rawVal: fallbackVal,
-          isCorrect: false,
-          distractorType: "CALCULATION_DISTRACTOR",
-          explanation: "Distractor based on an intermediate calculation error.",
-        });
-      }
+    // Backstop so a template that yields degenerate distractors still produces
+    // a complete five-option question.
+    let spread = 1;
+    while (candidates.length < OPTION_KEYS.length) {
+      const factor = spread % 2 === 0 ? 1 + 0.06 * spread : 1 - 0.06 * spread;
+      const value = generated.correctValue * factor;
+      const text = formatAnswer(value, generated.format);
+      spread += 1;
+      if (usedTexts.has(text) || !Number.isFinite(value)) continue;
+      usedTexts.add(text);
+      candidates.push({
+        text,
+        value,
+        isCorrect: false,
+        distractorType: "CALCULATION_DISTRACTOR",
+        explanation:
+          "Plausible magnitude produced by an arithmetic slip in the final evaluation step.",
+      });
     }
 
-    // Shuffle options and assign A, B, C, D, E keys
-    const shuffled = shuffle(rawOptions.slice(0, 5));
-    const optionKeys: ("A" | "B" | "C" | "D" | "E")[] = ["A", "B", "C", "D", "E"];
+    // SOA answer choices are listed in ascending numeric order rather than
+    // shuffled, which also removes any positional bias in the correct answer.
+    const ordered = [...candidates].sort((a, b) => a.value - b.value);
 
-    const renderedOptions: RenderedOption[] = shuffled.map((opt, idx) => ({
-      key: optionKeys[idx],
-      text: opt.text,
-      isCorrect: opt.isCorrect,
-      distractorType: opt.distractorType,
-      distractorExplanation: opt.explanation,
+    const renderedOptions: RenderedOption[] = ordered.map((option, index) => ({
+      key: OPTION_KEYS[index] as OptionKey,
+      text: option.text,
+      isCorrect: option.isCorrect,
+      distractorType: option.distractorType,
+      distractorExplanation: option.explanation,
     }));
 
     return {
-      id: `q_${examSessionId}_${index + 1}`,
+      id: `q_${examSessionId}_${questionNumber}`,
       examSessionId,
       templateId: template.id,
+      templateTitle: template.title,
+      objective: template.objective,
       domain: template.domain,
       renderedQuestion: generated.questionText,
       renderedOptions,
       selectedOption: null,
       isFlagged: false,
-      variables: generated.variables,
+      variables: { ...generated.variables, [SEED_VARIABLE_KEY]: seed },
       isCorrect: null,
       solutionSteps: generated.solutionSteps,
-      videoUrl: generated.videoUrl,
+      videoUrl: solutionVideoUrl(template.id),
     };
   }
 
   /**
-   * Generates exactly 30 questions distributed across the 5 SOA Exam FM domains:
-   * 1. TIME_VALUE_OF_MONEY (6 questions)
-   * 2. ANNUITIES (6 questions)
-   * 3. LOANS (6 questions)
-   * 4. BONDS (6 questions)
-   * 5. ALM_IMMUNIZATION (6 questions)
+   * Builds a complete mock exam: 30 questions, six from each of the five
+   * syllabus domains, with no template used twice in the same sitting.
    */
   public generateFullExam(options: GenerateExamOptions): ExamQuestionData[] {
-    const { sessionId, totalQuestions = 30 } = options;
+    const {
+      sessionId,
+      totalQuestions = EXAM_TOTAL_QUESTIONS,
+      seed = `${sessionId}-${Date.now()}`,
+    } = options;
 
-    const domains: TopicDomain[] = [
-      "TIME_VALUE_OF_MONEY",
-      "ANNUITIES",
-      "LOANS",
-      "BONDS",
-      "ALM_IMMUNIZATION",
-    ];
+    const rng = createRng(seed);
+    const perDomain = Math.floor(totalQuestions / DOMAIN_ORDER.length) || QUESTIONS_PER_DOMAIN;
+    const selected: QuestionTemplateDefinition[] = [];
 
-    const questionsPerDomain = Math.floor(totalQuestions / domains.length); // 6 each
-    const questions: ExamQuestionData[] = [];
-    let qCounter = 0;
+    for (const domain of DOMAIN_ORDER) {
+      const pool = TEMPLATES_BY_DOMAIN[domain] ?? [];
+      if (pool.length === 0) continue;
 
-    for (const domain of domains) {
-      const domainTemplates = this.templates.filter((t) => t.domain === domain);
-      if (domainTemplates.length === 0) continue;
-
-      for (let i = 0; i < questionsPerDomain; i++) {
-        // Cycle or pick random template within the domain
-        const template = domainTemplates[i % domainTemplates.length];
-        const q = this.generateSingleQuestion(template, sessionId, qCounter++);
-        questions.push(q);
+      const shuffled = rng.shuffle(pool);
+      for (let i = 0; i < perDomain; i += 1) {
+        // The blueprint invariant guarantees pool.length >= perDomain; the
+        // modulo only guards a caller asking for more than the blueprint size.
+        selected.push(shuffled[i % shuffled.length]);
       }
     }
 
-    // If remaining questions to reach totalQuestions (e.g. if total wasn't divisible by 5)
-    while (questions.length < totalQuestions) {
-      const template = this.templates[questions.length % this.templates.length];
-      questions.push(this.generateSingleQuestion(template, sessionId, qCounter++));
+    // Top up if totalQuestions is not divisible by the number of domains.
+    while (selected.length < totalQuestions) {
+      selected.push(rng.choice(this.templates));
     }
 
-    // Shuffle order of questions across the 30-question exam so domains are interspersed naturally
-    return shuffle(questions).map((q, idx) => ({
-      ...q,
-      // Retain consistent question index 1-30 in the session
-      id: `q_${sessionId}_${idx + 1}`,
-    }));
+    return rng
+      .shuffle(selected.slice(0, totalQuestions))
+      .map((template, index) =>
+        this.generateQuestion(template, {
+          examSessionId: sessionId,
+          questionNumber: index + 1,
+          seed: `${seed}:${index + 1}:${template.id}`,
+        })
+      );
+  }
+
+  /**
+   * Rebuilds a persisted question from its template id and stored seed.
+   * Returns null when the template no longer exists.
+   */
+  public regenerate(
+    templateId: string,
+    seed: string,
+    context: { examSessionId: string; questionNumber: number }
+  ): ExamQuestionData | null {
+    const template = getTemplateById(templateId);
+    if (!template) return null;
+    return this.generateQuestion(template, { ...context, seed });
   }
 }
 

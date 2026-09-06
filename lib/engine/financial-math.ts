@@ -152,6 +152,42 @@ export const ActuarialMath = {
     return this.bondPrice(par, couponRate, yieldRate, redemptionValue, n - t);
   },
 
+  /**
+   * Yield rate per coupon period implied by a bond price, solved by bisection.
+   * `price` and `redemptionValue` are per the same par as `couponRate`.
+   * Returns the periodic yield, or NaN when no root exists in (0, 1].
+   */
+  bondYieldToMaturity(
+    par: number,
+    couponRate: number,
+    redemptionValue: number,
+    n: number,
+    price: number,
+    tolerance: number = 1e-12
+  ): number {
+    let low = 1e-9;
+    let high = 1;
+
+    const priceAt = (y: number) => this.bondPrice(par, couponRate, y, redemptionValue, n);
+
+    // The bond price is strictly decreasing in the yield, so a sign change
+    // between the bracket endpoints guarantees a unique root.
+    if ((priceAt(low) - price) * (priceAt(high) - price) > 0) return NaN;
+
+    for (let iteration = 0; iteration < 200; iteration += 1) {
+      const mid = (low + high) / 2;
+      const diff = priceAt(mid) - price;
+      if (Math.abs(diff) < tolerance || high - low < tolerance) return mid;
+      if (diff > 0) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    return (low + high) / 2;
+  },
+
   // Macaulay Duration of general cash flows: D_mac = sum(t * Ct * v^t) / sum(Ct * v^t)
   macaulayDuration(cashFlows: { t: number; amount: number }[], y: number): number {
     let numerator = 0;

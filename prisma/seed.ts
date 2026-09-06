@@ -1,47 +1,26 @@
-import { prisma } from "../lib/prisma";
+import { examRepository } from "../lib/db";
 import { QUESTION_TEMPLATES } from "../lib/engine/templates";
+import { prisma } from "../lib/prisma";
 
 async function main() {
   if (!prisma) {
-    console.log("Prisma client not yet generated. Please run `npx prisma generate` first.");
+    console.error("Prisma Client is not generated. Run `npm run prisma:generate` first.");
+    process.exitCode = 1;
     return;
   }
 
-  console.log("Seeding Question Templates for SOA Exam FM...");
+  console.log(`Seeding ${QUESTION_TEMPLATES.length} question templates...`);
+  await examRepository.seedTemplates();
 
-  for (const t of QUESTION_TEMPLATES) {
-    const sample = t.generate();
-    await prisma.questionTemplate.upsert({
-      where: { id: t.id },
-      update: {
-        domain: t.domain,
-        templateText: sample.questionText,
-        solutionSteps: sample.solutionSteps,
-        videoUrl: sample.videoUrl,
-        parameterSchema: sample.variables,
-      },
-      create: {
-        id: t.id,
-        domain: t.domain,
-        templateText: sample.questionText,
-        solutionSteps: sample.solutionSteps,
-        videoUrl: sample.videoUrl,
-        parameterSchema: sample.variables,
-      },
-    });
-    console.log(`- Seeded template: ${t.id} (${t.domain})`);
-  }
-
-  console.log("Seeding completed successfully.");
+  const count = await prisma.questionTemplate.count();
+  console.log(`Done. questionTemplate rows in database: ${count}`);
 }
 
 main()
-  .catch((e) => {
-    console.error("Error seeding database:", e);
-    process.exit(1);
+  .catch((error) => {
+    console.error("Seeding failed:", error);
+    process.exitCode = 1;
   })
   .finally(async () => {
-    if (prisma) {
-      await prisma.$disconnect();
-    }
+    if (prisma) await prisma.$disconnect();
   });

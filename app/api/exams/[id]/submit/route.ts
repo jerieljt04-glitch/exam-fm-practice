@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
 import { examRepository } from "@/lib/db";
 
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export const dynamic = "force-dynamic";
+
+export async function POST(_req: Request, { params }: { params: { id: string } }) {
   try {
-    const reviewData = await examRepository.submitExam(params.id);
-    return NextResponse.json({ success: true, review: reviewData });
-  } catch (error: any) {
+    const session = await examRepository.getExamSession(params.id);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Exam session not found" }, { status: 404 });
+    }
+
+    const review = await examRepository.submitExam(params.id);
+    return NextResponse.json({ success: true, review });
+  } catch (error) {
     console.error("Error submitting exam:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to submit exam" },
+      { success: false, error: "Failed to submit the exam" },
       { status: 500 }
     );
   }

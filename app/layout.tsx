@@ -1,28 +1,24 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SOA Exam FM Practice Platform | Actuarial Mathematics CBT",
+  title: "Exam FM Practice Platform",
   description:
-    "Production-grade SOA Exam FM (Financial Mathematics) Computer-Based Testing Practice Platform with dynamic parameterization, actuarial distractor modeling, real-time pause/resume engine, and KaTeX solution derivations.",
+    "A timed, 30-question computer-based practice exam for SOA Exam FM (Financial Mathematics), with parameterized questions, error-driven distractors, a pause/resume engine and full KaTeX solutions.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0f172a",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full bg-slate-900">
-      <head>
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
-          crossOrigin="anonymous"
-        />
-      </head>
-      <body className="min-h-full bg-slate-900 text-slate-100 font-sans antialiased flex flex-col selection:bg-blue-600 selection:text-white">
+    <html lang="en" className="h-full">
+      <body className="min-h-full bg-background font-sans text-foreground antialiased">
         {children}
       </body>
     </html>

@@ -3,37 +3,124 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Light surface — used by the CBT exam interface and the review report */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 45%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 160 84% 30%;
+    --success-foreground: 210 40% 98%;
+    --warning: 32 95% 44%;
+    --warning-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 91% 45%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    /* Dark surface — used by the marketing/landing shell and the CBT top bar */
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 160 84% 39%;
+    --success-foreground: 222 47% 11%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
   body {
-    @apply text-slate-900 bg-slate-50 antialiased selection:bg-blue-100 selection:text-blue-900 font-sans;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.15s ease-out forwards;
-}
-
-/* KaTeX custom sizing and formula alignment */
+/* ---------------------------------------------------------------------------
+   KaTeX presentation
+   The renderer emits inline math inside flowing prose and display math inside
+   its own horizontally scrollable block, so long derivations never force the
+   page body to scroll sideways.
+--------------------------------------------------------------------------- */
 .katex-content .katex {
-  font-size: 1.06em;
+  font-size: 1.05em;
 }
 
-.katex-display {
-  margin: 0.75em 0 !important;
-}
-
-.katex-html {
+.katex-content .katex-display {
+  margin: 0.75em 0;
   overflow-x: auto;
   overflow-y: hidden;
-  max-width: 100%;
+  padding: 0.15rem 0;
+}
+
+.katex-content .katex-display > .katex {
+  white-space: nowrap;
+}
+
+/* KaTeX renders a parse error as a red-highlighted node; make it legible
+   instead of alarming when a template ships a malformed macro. */
+.katex-content .katex-error {
+  color: hsl(var(--destructive));
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+/* Question and solution prose */
+.katex-content {
+  line-height: 1.75;
+}
+
+.katex-content strong {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+/* Thin, unobtrusive scrollbars for the navigation and formula panels */
+.scrollbar-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-slim::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 9999px;
+}
+
+.scrollbar-slim::-webkit-scrollbar-track {
+  background-color: transparent;
 }

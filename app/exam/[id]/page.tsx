@@ -2,20 +2,12 @@ import { notFound, redirect } from "next/navigation";
 import { examRepository } from "@/lib/db";
 import { ExamRunner } from "@/components/ExamRunner";
 
-interface ExamPageProps {
-  params: { id: string };
-}
+export const dynamic = "force-dynamic";
 
-export const revalidate = 0; // Dynamic route
-
-export default async function ExamPage({ params }: ExamPageProps) {
+export default async function ExamPage({ params }: { params: { id: string } }) {
   const session = await examRepository.getExamSession(params.id);
+  if (!session) notFound();
 
-  if (!session) {
-    notFound();
-  }
-
-  // If already completed, redirect to review
   if (session.status === "COMPLETED") {
     redirect(`/exam/${params.id}/review`);
   }

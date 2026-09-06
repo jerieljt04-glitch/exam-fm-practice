@@ -1,120 +1,171 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { EXAM_DURATION_SECONDS } from "@/lib/exam-config";
 
 export interface UseExamTimerOptions {
-  durationSeconds?: number; // default 9000 (150 minutes)
-  startTime: string; // ISO string
+  /** Total active exam time. Defaults to 9000 seconds (150 minutes). */
+  durationSeconds?: number;
+  /** ISO timestamp at which the sitting started. */
+  startTime: string;
+  /** Paused milliseconds already accumulated on the server. */
   initialPausedTimeMs?: number;
   initialIsPaused?: boolean;
+  /** ISO timestamp of an in-flight pause carried over from the server. */
+  initialLastPausedAt?: string | null;
   onTimeExpire?: () => void;
+  /** Persists the new pause state; a rejection rolls the toggle back. */
   onPauseToggle?: (isPaused: boolean) => Promise<void>;
 }
 
+export interface ExamTimerState {
+  remainingSeconds: number;
+  /** `HH:MM:SS`. */
+  formattedTime: string;
+  isPaused: boolean;
+  isSyncing: boolean;
+  pausedTimeMs: number;
+  /** Percentage of the allotted time already consumed, 0–100. */
+  elapsedPercent: number;
+  togglePause: () => Promise<void>;
+  /** Under 10 minutes remaining. */
+  isWarning: boolean;
+  /** Under 5 minutes remaining. */
+  isCritical: boolean;
+  isExpired: boolean;
+}
+
+const WARNING_THRESHOLD_SECONDS = 10 * 60;
+const CRITICAL_THRESHOLD_SECONDS = 5 * 60;
+
+function formatTime(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+/**
+ * Countdown clock for the CBT session.
+ *
+ * Remaining time is always recomputed from wall-clock timestamps rather than by
+ * decrementing a counter, so a backgrounded tab, a throttled interval or a page
+ * reload cannot hand the candidate extra time — or take any away. Paused
+ * intervals are accumulated in `pausedTimeMs` and excluded from elapsed time.
+ */
 export function useExamTimer({
-  durationSeconds = 9000,
+  durationSeconds = EXAM_DURATION_SECONDS,
   startTime,
   initialPausedTimeMs = 0,
   initialIsPaused = false,
+  initialLastPausedAt = null,
   onTimeExpire,
   onPauseToggle,
-}: UseExamTimerOptions) {
-  const [isPaused, setIsPaused] = useState<boolean>(initialIsPaused);
-  const [pausedTimeMs, setPausedTimeMs] = useState<number>(initialPausedTimeMs);
-  const [remainingSeconds, setRemainingSeconds] = useState<number>(durationSeconds);
-  const [isExpired, setIsExpired] = useState<boolean>(false);
+}: UseExamTimerOptions): ExamTimerState {
+  const [isPaused, setIsPaused] = useState(initialIsPaused);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [pausedTimeMs, setPausedTimeMs] = useState(initialPausedTimeMs);
+  const [remainingSeconds, setRemainingSeconds] = useState(durationSeconds);
+  const [isExpired, setIsExpired] = useState(false);
 
-  const pauseStartRef = useRef<number | null>(initialIsPaused ? Date.now() : null);
+  // Timestamp at which the current pause began, or null while running.
+  const pauseStartedAtRef = useRef<number | null>(
+    initialIsPaused ? (initialLastPausedAt ? new Date(initialLastPausedAt).getTime() : Date.now()) : null
+  );
   const onTimeExpireRef = useRef(onTimeExpire);
   onTimeExpireRef.current = onTimeExpire;
 
-  // Calculates remaining seconds based on real clock timestamps
-  const calculateTimeRemaining = useCallback(() => {
+  const computeRemaining = useCallback(() => {
     const startMs = new Date(startTime).getTime();
-    const nowMs = Date.now();
+    const now = Date.now();
 
-    let currentSessionPausedMs = pausedTimeMs;
-    if (isPaused && pauseStartRef.current) {
-      currentSessionPausedMs += nowMs - pauseStartRef.current;
+    let pausedMs = pausedTimeMs;
+    if (isPaused && pauseStartedAtRef.current !== null) {
+      pausedMs += now - pauseStartedAtRef.current;
     }
 
-    const elapsedTotalMs = nowMs - startMs;
-    const activeElapsedMs = Math.max(0, elapsedTotalMs - currentSessionPausedMs);
-    const activeElapsedSeconds = Math.floor(activeElapsedMs / 1000);
-    const left = Math.max(0, durationSeconds - activeElapsedSeconds);
+    const activeElapsedMs = Math.max(0, now - startMs - pausedMs);
+    return Math.max(0, durationSeconds - Math.floor(activeElapsedMs / 1000));
+  }, [durationSeconds, isPaused, pausedTimeMs, startTime]);
 
-    return left;
-  }, [startTime, pausedTimeMs, isPaused, durationSeconds]);
-
-  // Main tick interval
   useEffect(() => {
     if (isExpired) return;
 
     const tick = () => {
-      const left = calculateTimeRemaining();
-      setRemainingSeconds(left);
-
-      if (left <= 0 && !isExpired) {
+      const remaining = computeRemaining();
+      setRemainingSeconds(remaining);
+      if (remaining <= 0) {
         setIsExpired(true);
         onTimeExpireRef.current?.();
       }
     };
 
     tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [calculateTimeRemaining, isExpired]);
+    const interval = window.setInterval(tick, 1000);
 
-  // Toggle pause/resume
+    // Browsers throttle timers in background tabs; resync the moment the
+    // candidate returns so the clock never appears to have stalled.
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [computeRemaining, isExpired]);
+
   const togglePause = useCallback(async () => {
+    if (isExpired || isSyncing) return;
+
     const nextIsPaused = !isPaused;
     const now = Date.now();
+    const previousPausedTimeMs = pausedTimeMs;
+    const previousPauseStartedAt = pauseStartedAtRef.current;
 
     if (nextIsPaused) {
-      // Pausing
-      pauseStartRef.current = now;
-      setIsPaused(true);
-    } else {
-      // Resuming
-      if (pauseStartRef.current) {
-        const addedPausedMs = now - pauseStartRef.current;
-        setPausedTimeMs((prev) => prev + addedPausedMs);
-        pauseStartRef.current = null;
-      }
-      setIsPaused(false);
+      pauseStartedAtRef.current = now;
+    } else if (pauseStartedAtRef.current !== null) {
+      setPausedTimeMs((previous) => previous + (now - (pauseStartedAtRef.current ?? now)));
+      pauseStartedAtRef.current = null;
     }
+    setIsPaused(nextIsPaused);
 
-    if (onPauseToggle) {
-      try {
-        await onPauseToggle(nextIsPaused);
-      } catch (err) {
-        console.error("Failed to sync pause state with server:", err);
-      }
+    if (!onPauseToggle) return;
+
+    setIsSyncing(true);
+    try {
+      await onPauseToggle(nextIsPaused);
+    } catch (error) {
+      // Roll back so the client clock cannot drift away from the server's.
+      console.error("Failed to persist pause state; reverting.", error);
+      setIsPaused(!nextIsPaused);
+      setPausedTimeMs(previousPausedTimeMs);
+      pauseStartedAtRef.current = previousPauseStartedAt;
+    } finally {
+      setIsSyncing(false);
     }
-  }, [isPaused, onPauseToggle]);
+  }, [isExpired, isPaused, isSyncing, onPauseToggle, pausedTimeMs]);
 
-  // Format as HH:MM:SS
-  const formatTime = (totalSeconds: number): string => {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  };
-
-  // Visual status
-  const isWarning = remainingSeconds < 600 && remainingSeconds >= 300; // Under 10 mins
-  const isCritical = remainingSeconds < 300; // Under 5 mins
+  const elapsedPercent = useMemo(() => {
+    if (durationSeconds <= 0) return 100;
+    return Math.min(100, Math.max(0, ((durationSeconds - remainingSeconds) / durationSeconds) * 100));
+  }, [durationSeconds, remainingSeconds]);
 
   return {
     remainingSeconds,
     formattedTime: formatTime(remainingSeconds),
     isPaused,
+    isSyncing,
     pausedTimeMs,
+    elapsedPercent,
     togglePause,
-    isWarning,
-    isCritical,
+    isWarning: remainingSeconds < WARNING_THRESHOLD_SECONDS && remainingSeconds >= CRITICAL_THRESHOLD_SECONDS,
+    isCritical: remainingSeconds < CRITICAL_THRESHOLD_SECONDS,
     isExpired,
   };
 }

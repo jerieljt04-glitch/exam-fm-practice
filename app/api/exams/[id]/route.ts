@@ -1,56 +1,91 @@
 import { NextResponse } from "next/server";
 import { examRepository } from "@/lib/db";
+import { OPTION_KEYS } from "@/lib/exam-config";
 
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export const dynamic = "force-dynamic";
+
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await examRepository.getExamSession(params.id);
     if (!session) {
-      return NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
+      return NextResponse.json({ success: false, error: "Exam session not found" }, { status: 404 });
     }
     return NextResponse.json({ success: true, session });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error fetching exam session:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch session" },
+      { success: false, error: "Failed to load the exam session" },
       { status: 500 }
     );
   }
 }
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+type PatchBody =
+  | { action: "TOGGLE_PAUSE"; isPaused: boolean }
+  | { action: "SELECT_OPTION"; questionId: string; selectedOption: string | null }
+  | { action: "TOGGLE_FLAG"; questionId: string; isFlagged: boolean };
+
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
-    const body = await req.json();
-    const { action } = body;
+    const body = (await req.json()) as PatchBody;
 
-    if (action === "TOGGLE_PAUSE") {
-      const { isPaused } = body;
-      const updated = await examRepository.updatePauseState(params.id, isPaused);
-      return NextResponse.json({ success: true, session: updated });
+    switch (body.action) {
+      case "TOGGLE_PAUSE": {
+        if (typeof body.isPaused !== "boolean") {
+          return NextResponse.json(
+            { success: false, error: "isPaused must be a boolean" },
+            { status: 400 }
+          );
+        }
+        const session = await examRepository.updatePauseState(params.id, body.isPaused);
+        return NextResponse.json({
+          success: true,
+          session: {
+            id: session.id,
+            isPaused: session.isPaused,
+            pausedTimeMs: session.pausedTimeMs,
+            status: session.status,
+          },
+        });
+      }
+
+      case "SELECT_OPTION": {
+        const isValidKey =
+          body.selectedOption === null ||
+          (OPTION_KEYS as readonly string[]).includes(body.selectedOption);
+        if (!body.questionId || !isValidKey) {
+          return NextResponse.json(
+            { success: false, error: "questionId and a selectedOption of A–E (or null) are required" },
+            { status: 400 }
+          );
+        }
+        await examRepository.updateQuestionAnswer(params.id, body.questionId, body.selectedOption);
+        return NextResponse.json({ success: true });
+      }
+
+      case "TOGGLE_FLAG": {
+        if (!body.questionId || typeof body.isFlagged !== "boolean") {
+          return NextResponse.json(
+            { success: false, error: "questionId and a boolean isFlagged are required" },
+            { status: 400 }
+          );
+        }
+        await examRepository.updateQuestionAnswer(
+          params.id,
+          body.questionId,
+          undefined,
+          body.isFlagged
+        );
+        return NextResponse.json({ success: true });
+      }
+
+      default:
+        return NextResponse.json({ success: false, error: "Unknown action" }, { status: 400 });
     }
-
-    if (action === "SELECT_OPTION") {
-      const { questionId, selectedOption } = body;
-      await examRepository.updateQuestionAnswer(params.id, questionId, selectedOption);
-      return NextResponse.json({ success: true });
-    }
-
-    if (action === "TOGGLE_FLAG") {
-      const { questionId, isFlagged } = body;
-      await examRepository.updateQuestionAnswer(params.id, questionId, undefined, isFlagged);
-      return NextResponse.json({ success: true });
-    }
-
-    return NextResponse.json({ success: false, error: "Invalid action" }, { status: 400 });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error updating exam session:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Failed to update session" },
+      { success: false, error: "Failed to update the exam session" },
       { status: 500 }
     );
   }

@@ -3,261 +3,260 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Clock,
-  Play,
+  AlertTriangle,
+  Award,
   Calculator,
+  ChevronRight,
+  Clock,
+  Loader2,
+  Play,
   ShieldCheck,
   TrendingUp,
-  Award,
-  ChevronRight,
-  BookOpen,
-  CheckCircle2,
-  Sparkles,
 } from "lucide-react";
+
 import { MathRenderer } from "@/components/MathRenderer";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DOMAIN_DESCRIPTIONS,
+  DOMAIN_LABELS,
+  DOMAIN_ORDER,
+  EXAM_DURATION_MINUTES,
+  EXAM_TOTAL_QUESTIONS,
+  PASS_MARK,
+  PASS_RATIO,
+  QUESTIONS_PER_DOMAIN,
+} from "@/lib/exam-config";
+import type { TopicDomain } from "@/lib/types/exam";
+
+const DOMAIN_FORMULAS: Record<TopicDomain, string> = {
+  TIME_VALUE_OF_MONEY: "a(t) = \\exp\\left(\\int_0^t \\delta(s)\\,ds\\right)",
+  ANNUITIES: "(Ia)_{\\overline{n}|i} = \\frac{\\ddot{a}_{\\overline{n}|} - n v^n}{i}",
+  LOANS: "P_t = R \\cdot v^{\\,n-t+1}",
+  BONDS: "P = Fr \\cdot a_{\\overline{n}|y} + C \\cdot v^n",
+  ALM_IMMUNIZATION: "D_{\\text{mac}} = \\frac{\\sum t\\,C_t v^t}{P}",
+};
 
 export default function HomePage() {
   const router = useRouter();
   const [isStarting, setIsStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const startExam = async () => {
     setIsStarting(true);
+    setError(null);
+
     try {
-      const res = await fetch("/api/exams/start", {
+      const response = await fetch("/api/exams/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: "actuarial-candidate" }),
+        body: JSON.stringify({ userId: "candidate-1" }),
       });
-      const data = await res.json();
-      if (data.success && data.session) {
-        router.push(`/exam/${data.session.id}`);
-      } else {
-        throw new Error(data.error || "Failed to start exam");
+      const data = await response.json();
+
+      if (!response.ok || !data.success || !data.session) {
+        throw new Error(data.error ?? "The exam could not be generated.");
       }
-    } catch (err: any) {
-      alert("Error generating exam: " + err.message);
+      router.push(`/exam/${data.session.id}`);
+    } catch (caught) {
+      console.error("Failed to start exam:", caught);
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Something went wrong while generating the exam. Please try again."
+      );
       setIsStarting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-blue-600 selection:text-white">
-      {/* Top Navigation */}
-      <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div className="dark flex min-h-screen flex-col bg-background text-foreground">
+      <header className="sticky top-0 z-30 border-b border-border/80 bg-background/85 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-700 to-sky-500 flex items-center justify-center font-black text-white text-sm shadow-md shadow-blue-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-700 to-sky-500 text-sm font-black text-white shadow-md shadow-blue-500/20">
               FM
             </div>
             <div>
-              <span className="font-extrabold text-white text-base tracking-tight block">
-                SOA Exam FM Practice Platform
+              <span className="block text-base font-extrabold tracking-tight">
+                Exam FM Practice Platform
               </span>
-              <span className="text-[11px] text-blue-400 font-mono block -mt-0.5">
-                Financial Mathematics CBT Simulation Engine
+              <span className="-mt-0.5 block font-mono text-[11px] text-blue-400">
+                Financial mathematics CBT simulator
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-slate-900 text-slate-300 border border-slate-800">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              SOA 2026 Syllabus Ready
-            </span>
-          </div>
+          <Badge variant="outline" className="hidden gap-1.5 sm:inline-flex">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            Independent study tool
+          </Badge>
         </div>
       </header>
 
-      {/* Main Hero Container */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
-        {/* Hero Section */}
-        <section className="text-center space-y-6 max-w-3xl mx-auto pt-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/20 text-xs font-semibold tracking-wide shadow-sm">
-            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            <span>Computer-Based Testing (CBT) Simulation</span>
-          </div>
+      <main className="mx-auto w-full max-w-6xl flex-1 space-y-16 px-4 py-12 sm:px-6 lg:px-8">
+        <section className="mx-auto max-w-3xl space-y-6 pt-4 text-center">
+          <Badge variant="outline" className="gap-2 border-blue-500/30 bg-blue-500/10 text-blue-300">
+            <Calculator className="h-3.5 w-3.5" />
+            Computer-based testing simulation
+          </Badge>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.15]">
-            Master Society of Actuaries{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-sky-300 to-indigo-300">
+          <h1 className="text-4xl font-black leading-[1.15] tracking-tight sm:text-5xl lg:text-6xl">
+            Practice for{" "}
+            <span className="bg-gradient-to-r from-blue-400 via-sky-300 to-indigo-300 bg-clip-text text-transparent">
               Exam FM
-            </span>
+            </span>{" "}
+            under exam conditions
           </h1>
 
-          <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto font-normal">
-            Experience authentic Prometric CBT test conditions: 30 dynamic multiple-choice questions,
-            algorithmic distractor modeling targeting classic student traps, real-time pause/resume timing, and
-            step-by-step KaTeX mathematical derivations.
+          <p className="mx-auto max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            {EXAM_TOTAL_QUESTIONS} multiple-choice questions in {EXAM_DURATION_MINUTES} minutes, with
+            fresh numbers on every attempt, wrong answers built from the mistakes candidates actually
+            make, a pause/resume clock, and a full worked solution for every question.
           </p>
 
-          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={startExam}
-              disabled={isStarting}
-              className="w-full sm:w-auto px-8 py-4 rounded-xl text-base font-bold bg-blue-600 hover:bg-blue-500 active:scale-95 text-white shadow-xl shadow-blue-600/25 transition-all flex items-center justify-center gap-3 group border border-blue-400/30"
-            >
+          <div className="flex flex-col items-center justify-center gap-3 pt-2">
+            <Button size="lg" onClick={startExam} disabled={isStarting} className="w-full sm:w-auto">
               {isStarting ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Generating 30 Unique Questions...</span>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Generating {EXAM_TOTAL_QUESTIONS} questions
                 </>
               ) : (
                 <>
-                  <Play className="w-5 h-5 fill-current transition-transform group-hover:scale-110 text-white" />
-                  <span>Launch Official Mock Exam (30 Questions)</span>
+                  <Play className="h-5 w-5 fill-current" />
+                  Start a {EXAM_TOTAL_QUESTIONS}-question mock exam
                 </>
               )}
-            </button>
+            </Button>
+
+            {error && (
+              <p className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {error}
+              </p>
+            )}
           </div>
 
-          <div className="flex items-center justify-center gap-6 pt-2 text-xs text-slate-400 font-medium">
+          <div className="flex flex-wrap items-center justify-center gap-6 pt-2 text-xs font-medium text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-blue-400" /> 150 Minutes (2.5 Hours)
+              <Clock className="h-3.5 w-3.5 text-blue-400" /> {EXAM_DURATION_MINUTES} minutes
             </span>
             <span className="flex items-center gap-1.5">
-              <Calculator className="w-3.5 h-3.5 text-sky-400" /> 30 Multiple Choice (A–E)
+              <Calculator className="h-3.5 w-3.5 text-sky-400" /> {EXAM_TOTAL_QUESTIONS} questions,
+              options A–E
             </span>
             <span className="flex items-center gap-1.5">
-              <Award className="w-3.5 h-3.5 text-emerald-400" /> 70% Pass Standard (21/30)
+              <Award className="h-3.5 w-3.5 text-emerald-400" /> {Math.round(PASS_RATIO * 100)}%
+              benchmark ({PASS_MARK}/{EXAM_TOTAL_QUESTIONS})
             </span>
           </div>
         </section>
 
-        {/* 3 Core Architecture Pillars */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-6 rounded-2xl bg-slate-900/70 border border-slate-800/90 shadow-lg hover:border-slate-700 transition-all space-y-3.5">
-            <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shadow-inner">
-              <Clock className="w-5 h-5" />
+        <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {[
+            {
+              icon: Clock,
+              title: "Timed, pausable sitting",
+              body: `A ${EXAM_DURATION_MINUTES}-minute countdown driven by wall-clock timestamps, so reloading the page never gives or takes time. Pausing stops the clock and hides every question.`,
+              tint: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+            },
+            {
+              icon: TrendingUp,
+              title: "Fresh numbers every attempt",
+              body: "Interest rates, terms, compounding frequencies, coupons and cash flow timings are drawn at random within valid bounds, so no two sittings pose the same question twice.",
+              tint: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20",
+            },
+            {
+              icon: ShieldCheck,
+              title: "Distractors from real mistakes",
+              body: "Each wrong option is computed by simulating a specific error — annuity-due confusion, simple interest, an off-by-one period, or a nominal-rate slip — and the review names it.",
+              tint: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+            },
+          ].map((pillar) => (
+            <div
+              key={pillar.title}
+              className="space-y-3.5 rounded-2xl border border-border/80 bg-card/70 p-6 shadow-lg transition-colors hover:border-border"
+            >
+              <div className={`flex h-11 w-11 items-center justify-center rounded-xl border ${pillar.tint}`}>
+                <pillar.icon className="h-5 w-5" />
+              </div>
+              <h2 className="text-lg font-bold">{pillar.title}</h2>
+              <p className="text-xs leading-relaxed text-muted-foreground">{pillar.body}</p>
             </div>
-            <h3 className="text-lg font-bold text-white">150 Minutes Timed CBT</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Full 2.5-hour countdown timer with high-contrast warning cues, millisecond-accurate tracking,
-              and a secure Pause/Resume engine that blurs questions to maintain strict exam integrity.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-2xl bg-slate-900/70 border border-slate-800/90 shadow-lg hover:border-slate-700 transition-all space-y-3.5">
-            <div className="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shadow-inner">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-            <h3 className="text-lg font-bold text-white">Dynamic Parameterization</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              No static repeated questions. Interest rates, loan terms, compounding frequencies, and
-              bond coupons vary algorithmically within valid SOA actuarial bounds on every attempt.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-2xl bg-slate-900/70 border border-slate-800/90 shadow-lg hover:border-slate-700 transition-all space-y-3.5">
-            <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <h3 className="text-lg font-bold text-white">Error-Driven Distractors</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Incorrect options are computed using real candidate pitfalls: confusing annuity-immediate with
-              due, simple interest errors, off-by-one compounding, and nominal rate conversions.
-            </p>
-          </div>
+          ))}
         </section>
 
-        {/* Syllabus Domain Breakdown */}
-        <section className="p-8 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-xl space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-5">
+        <section className="space-y-6 rounded-2xl border border-border bg-card/80 p-8 shadow-xl">
+          <div className="flex flex-col items-start justify-between gap-3 border-b border-border pb-5 sm:flex-row sm:items-center">
             <div>
-              <h2 className="text-xl font-bold text-white">5 Core Syllabus Domains (6 Questions Each)</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Balanced distribution matching the official Society of Actuaries Exam FM blueprint
+              <h2 className="text-xl font-bold">
+                Five syllabus domains, {QUESTIONS_PER_DOMAIN} questions each
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Every sitting draws {QUESTIONS_PER_DOMAIN} distinct question types per domain, so no
+                structure repeats within an exam.
               </p>
             </div>
-            <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-800/70">
-              Exactly 30 Questions
-            </span>
+            <Badge variant="success" className="font-mono">
+              {EXAM_TOTAL_QUESTIONS} questions
+            </Badge>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              {
-                num: "01",
-                title: "Time Value of Money",
-                desc: "Nominal vs effective interest, force of interest integration, equations of value, discounting.",
-                formula: "a(t) = \\exp\\left(\\int_0^t \\delta(s)ds\\right)",
-              },
-              {
-                num: "02",
-                title: "Annuities & Cash Flows",
-                desc: "Level immediate/due, arithmetic increasing (Ia), geometric perpetuities, continuous streams.",
-                formula: "(Ia)_{\\overline{n}|i} = \\frac{\\ddot{a}_{\\overline{n}|} - n v^n}{i}",
-              },
-              {
-                num: "03",
-                title: "Loans & Amortization",
-                desc: "Amortization schedules, prospective & retrospective balances, interest/principal split, sinking funds.",
-                formula: "P_t = R \\cdot v^{n-t+1}",
-              },
-              {
-                num: "04",
-                title: "Bonds & Valuation",
-                desc: "Pricing formulas, book values, premium write-down, callable bonds under minimum yield rule.",
-                formula: "P = Fr \\cdot a_{\\overline{n}|y} + C \\cdot v^n",
-              },
-              {
-                num: "05",
-                title: "ALM & Immunization",
-                desc: "Macaulay duration, modified duration price sensitivity, convexity, Redington & full immunization.",
-                formula: "D_{\\text{mac}} = \\frac{\\sum t C_t v^t}{P}",
-              },
-            ].map((topic) => (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {DOMAIN_ORDER.map((domain, index) => (
               <div
-                key={topic.num}
-                className="p-5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700 transition-all space-y-2.5 flex flex-col justify-between"
+                key={domain}
+                className="flex flex-col justify-between space-y-2.5 rounded-xl border border-border/80 bg-background/60 p-5 transition-colors hover:border-border"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-mono font-extrabold text-blue-400 tracking-wider">
-                      TOPIC {topic.num}
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="font-mono text-xs font-extrabold tracking-wider text-blue-400">
+                      TOPIC {String(index + 1).padStart(2, "0")}
                     </span>
-                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
-                      6 Questions
-                    </span>
+                    <Badge variant="muted" className="text-[10px] uppercase">
+                      {QUESTIONS_PER_DOMAIN} questions
+                    </Badge>
                   </div>
-                  <h4 className="text-sm font-bold text-white mb-1">{topic.title}</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed font-normal">{topic.desc}</p>
+                  <h3 className="mb-1 text-sm font-bold">{DOMAIN_LABELS[domain]}</h3>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {DOMAIN_DESCRIPTIONS[domain]}
+                  </p>
                 </div>
-                <div className="pt-2 border-t border-slate-800/60 text-xs text-sky-300 font-mono overflow-x-auto">
-                  <MathRenderer content={`$${topic.formula}$`} />
-                </div>
+                <MathRenderer
+                  content={`$${DOMAIN_FORMULAS[domain]}$`}
+                  className="scrollbar-slim overflow-x-auto border-t border-border/60 pt-2 text-xs text-sky-300"
+                />
               </div>
             ))}
 
-            {/* Quick Start Card */}
-            <div className="p-6 rounded-xl bg-gradient-to-br from-blue-900/50 via-indigo-900/40 to-slate-900 border border-blue-600/40 flex flex-col justify-between space-y-4 shadow-lg">
+            <div className="flex flex-col justify-between space-y-4 rounded-xl border border-blue-600/40 bg-gradient-to-br from-blue-900/50 via-indigo-900/40 to-slate-900 p-6 shadow-lg">
               <div>
-                <span className="text-[11px] font-mono font-extrabold text-blue-300 tracking-wider uppercase">
-                  EXAM PASSING BENCHMARK
+                <span className="font-mono text-[11px] font-extrabold uppercase tracking-wider text-blue-300">
+                  After you submit
                 </span>
-                <h4 className="text-base font-extrabold text-white mt-1">SOA Grade Scale 0–10</h4>
-                <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
-                  Passing requires at least <strong>70% (21/30)</strong>. Step-by-step KaTeX solutions,
-                  trap analysis, and video solution streams are provided immediately upon submission.
+                <h3 className="mt-1 text-base font-extrabold">Full diagnostic report</h3>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-300">
+                  A score out of {EXAM_TOTAL_QUESTIONS}, a percentage for each domain, the specific
+                  error behind every wrong option you chose, and a complete step-by-step derivation
+                  rendered in KaTeX.
                 </p>
               </div>
 
-              <button
-                onClick={startExam}
-                disabled={isStarting}
-                className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 group"
-              >
-                <span>Start Practice Attempt</span>
-                <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-              </button>
+              <Button onClick={startExam} disabled={isStarting} size="sm" className="w-full">
+                Start practice attempt
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 py-8 text-center text-xs text-slate-500 bg-slate-950">
-        <p className="max-w-md mx-auto">
-          Society of Actuaries (SOA) Exam FM Practice Platform • Computer-Based Testing Simulation Environment
+      <footer className="border-t border-border/80 bg-background py-8 text-center text-xs text-muted-foreground">
+        <p className="mx-auto max-w-2xl px-4 leading-relaxed">
+          An independent study tool for SOA Exam FM (Financial Mathematics). Not affiliated with,
+          endorsed by, or sponsored by the Society of Actuaries. Question content is generated by
+          this application and is not drawn from any official examination.
         </p>
       </footer>
     </div>
