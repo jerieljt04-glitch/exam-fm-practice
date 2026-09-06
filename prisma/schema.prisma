@@ -1,0 +1,52 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum TopicDomain {
+  TIME_VALUE_OF_MONEY
+  ANNUITIES
+  LOANS
+  BONDS
+  ALM_IMMUNIZATION
+}
+
+model QuestionTemplate {
+  id              String         @id @default(uuid())
+  domain          TopicDomain
+  templateText    String
+  solutionSteps   String
+  videoUrl        String
+  parameterSchema Json
+  generatedItems  ExamQuestion[]
+}
+
+model ExamSession {
+  id               String         @id @default(uuid())
+  userId           String
+  startTime        DateTime       @default(now())
+  endTime          DateTime?
+  pausedTimeMs     Int            @default(0)
+  isPaused         Boolean        @default(false)
+  lastPausedAt     DateTime?
+  durationSeconds  Int            @default(9000) // 150 minutes
+  status           String         // "IN_PROGRESS", "PAUSED", "COMPLETED"
+  questions        ExamQuestion[]
+}
+
+model ExamQuestion {
+  id                 String           @id @default(uuid())
+  examSessionId      String
+  examSession        ExamSession      @relation(fields: [examSessionId], references: [id])
+  templateId         String
+  template           QuestionTemplate @relation(fields: [templateId], references: [id])
+  renderedQuestion   String
+  renderedOptions    Json             // Array of { key: "A".."E", text: string, isCorrect: boolean }
+  selectedOption     String?
+  variables          Json
+  isCorrect          Boolean?
+}
