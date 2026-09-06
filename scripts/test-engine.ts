@@ -11,8 +11,17 @@
 
 import katex from "katex";
 
-import { DOMAIN_ORDER, EXAM_TOTAL_QUESTIONS, OPTION_KEYS, QUESTIONS_PER_DOMAIN } from "../lib/exam-config";
+import {
+  DEFAULT_DIFFICULTIES,
+  DOMAIN_ORDER,
+  EXAM_TOTAL_QUESTIONS,
+  MIN_ADVANCED_PER_DOMAIN,
+  MIN_ADVANCED_STEPS,
+  OPTION_KEYS,
+  QUESTIONS_PER_DOMAIN,
+} from "../lib/exam-config";
 import { examGenerator } from "../lib/engine/generator";
+import { createRng } from "../lib/engine/random";
 import { QUESTION_TEMPLATES, TEMPLATES_BY_DOMAIN } from "../lib/engine/templates";
 import { examRepository } from "../lib/db";
 import { parseMarkup } from "../lib/math/markup";
@@ -69,6 +78,15 @@ function checkMarkup(label: string, markup: string): void {
       continue;
     }
 
+    // Inside math mode `%` opens a LaTeX comment, silently swallowing the rest
+    // of the expression. Percentages in math must be written `\\%`.
+    if (/(^|[^\\])%/.test(segment.value)) {
+      check(
+        false,
+        `${label}: unescaped % inside math silently comments out the rest of "${segment.value.slice(0, 90)}"`
+      );
+    }
+
     try {
       katex.renderToString(segment.value, {
         displayMode: segment.type === "display",
@@ -110,6 +128,16 @@ function checkQuestion(question: ExamQuestionData, index: number): void {
   );
   check(question.solutionSteps.trim().length > 0, `${label}: missing worked solution`);
   check(question.objective.trim().length > 0, `${label}: missing learning objective`);
+
+  // No examiner prints a negative outstanding balance next to four positive
+  // ones; an implausible option gives the answer away.
+  const correctOption = question.renderedOptions.find((option) => option.isCorrect);
+  if (correctOption && !correctOption.text.trimStart().startsWith("-")) {
+    check(
+      question.renderedOptions.every((option) => !option.text.trimStart().startsWith("-")),
+      `${label}: a negative option appears alongside a positive correct answer`
+    );
+  }
 
   checkMarkup(`${label} question`, question.renderedQuestion);
   checkMarkup(`${label} solution`, question.solutionSteps);
@@ -164,9 +192,58 @@ async function run(): Promise<void> {
       );
     }
 
+    // Difficulty blueprint: level 1 never appears, and every domain contributes
+    // its quota of level 3+ synthesis questions.
+    for (const domain of DOMAIN_ORDER) {
+      const inDomain = questions.filter((question) => question.domain === domain);
+      check(
+        inDomain.every((question) => DEFAULT_DIFFICULTIES.includes(question.difficulty)),
+        `Exam ${attempt}: ${domain} drew a question outside the default difficulty range`
+      );
+      const advanced = inDomain.filter((question) => question.difficulty >= 3);
+      check(
+        advanced.length >= MIN_ADVANCED_PER_DOMAIN,
+        `Exam ${attempt}: ${domain} drew ${advanced.length} level 3+ questions, expected at least ${MIN_ADVANCED_PER_DOMAIN}`
+      );
+    }
+
     questions.forEach(checkQuestion);
   }
   console.log(`  Checked ${EXAM_COUNT * EXAM_TOTAL_QUESTIONS} generated questions.`);
+
+  section("2b. Template self-verification");
+  let assertionCount = 0;
+  for (const template of QUESTION_TEMPLATES) {
+    for (let draw = 0; draw < 40; draw += 1) {
+      const item = template.generate(createRng(`verify-${template.id}-${draw}`));
+
+      if (template.difficulty >= 3) {
+        check(
+          template.steps >= MIN_ADVANCED_STEPS && template.topics.length >= 2,
+          `${template.id}: level ${template.difficulty} items must chain ${MIN_ADVANCED_STEPS}+ steps across 2+ syllabus areas`
+        );
+        const stageHeadings = item.solutionSteps.match(/\*\*Step \d+/g) ?? [];
+        check(
+          stageHeadings.length >= MIN_ADVANCED_STEPS,
+          `${template.id}: solution shows ${stageHeadings.length} stages, expected at least ${MIN_ADVANCED_STEPS}`
+        );
+      }
+
+      for (const assertion of item.checks ?? []) {
+        assertionCount += 1;
+        check(assertion.ok, `${template.id}: failed self-check "${assertion.label}"`);
+      }
+
+      // Markup coverage per template, rather than relying on which templates
+      // happen to be drawn into the sampled exams above.
+      checkMarkup(`${template.id} draw ${draw} question`, item.questionText);
+      checkMarkup(`${template.id} draw ${draw} solution`, item.solutionSteps);
+      for (const item_distractor of item.distractors) {
+        checkMarkup(`${template.id} draw ${draw} rationale`, item_distractor.explanation);
+      }
+    }
+  }
+  console.log(`  Ran ${assertionCount} generator self-checks across ${QUESTION_TEMPLATES.length} templates.`);
 
   section("3. Determinism and regeneration");
   const seeded = () =>

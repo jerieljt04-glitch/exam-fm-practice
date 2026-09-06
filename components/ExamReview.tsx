@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 
 import { MathRenderer } from "./MathRenderer";
-import { VideoPlayer } from "./VideoPlayer";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -23,7 +22,14 @@ import { Card } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Separator } from "./ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "./ui/tabs";
-import { DOMAIN_LABELS, DOMAIN_ORDER, PASS_MARK, PASS_RATIO } from "@/lib/exam-config";
+import {
+  DIFFICULTY_LABELS,
+  DOMAIN_LABELS,
+  DOMAIN_ORDER,
+  PASS_MARK,
+  PASS_RATIO,
+  TOPIC_LABELS,
+} from "@/lib/exam-config";
 import type { ExamQuestionData, ExamReviewData, ProficiencyStatus } from "@/lib/types/exam";
 import { cn } from "@/lib/utils";
 
@@ -362,6 +368,12 @@ function QuestionReviewItem({
                 <Badge variant="muted" className="text-[10px]">
                   {DOMAIN_LABELS[question.domain]}
                 </Badge>
+                <Badge
+                  variant={question.difficulty >= 3 ? "warning" : "outline"}
+                  className="text-[10px]"
+                >
+                  {DIFFICULTY_LABELS[question.difficulty]}
+                </Badge>
                 {question.isFlagged && (
                   <Badge variant="warning" className="gap-1 text-[10px]">
                     <Bookmark className="h-3 w-3" />
@@ -457,7 +469,7 @@ function QuestionReviewItem({
             </section>
           )}
 
-          <section className="space-y-3 rounded-xl border bg-card p-6">
+          <section className="mb-2 space-y-3 rounded-xl border bg-card p-6">
             <div className="flex items-center gap-2 border-b pb-2">
               <BookOpen className="h-4 w-4 text-primary" />
               <h3 className="text-sm font-bold">Step-by-step solution</h3>
@@ -465,20 +477,18 @@ function QuestionReviewItem({
             {question.objective && (
               <>
                 <p className="text-xs text-muted-foreground">{question.objective}</p>
+                {question.topics.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">
+                      {question.steps} interdependent step{question.steps === 1 ? "" : "s"}
+                    </span>{" "}
+                    across {question.topics.map((topic) => TOPIC_LABELS[topic]).join(" + ")}.
+                  </p>
+                )}
                 <Separator />
               </>
             )}
             <MathRenderer content={question.solutionSteps} className="text-sm leading-relaxed" />
-          </section>
-
-          <section className="space-y-2 pb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Video walkthrough
-            </h3>
-            <VideoPlayer
-              videoUrl={question.videoUrl}
-              title={`Question ${questionNumber} — ${question.templateTitle}`}
-            />
           </section>
         </AccordionContent>
       </AccordionItem>

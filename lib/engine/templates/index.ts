@@ -1,9 +1,16 @@
 import type { TopicDomain } from "../../types/exam";
-import { DOMAIN_ORDER, QUESTIONS_PER_DOMAIN } from "../../exam-config";
+import {
+  DEFAULT_DIFFICULTIES,
+  DOMAIN_ORDER,
+  MIN_ADVANCED_PER_DOMAIN,
+  MIN_ADVANCED_STEPS,
+  QUESTIONS_PER_DOMAIN,
+} from "../../exam-config";
 import { ALM_TEMPLATES } from "./alm-immunization";
 import { ANNUITY_TEMPLATES } from "./annuities";
 import { BOND_TEMPLATES } from "./bonds";
 import { LOAN_TEMPLATES } from "./loans";
+import { MULTI_STEP_TEMPLATES } from "./multi-step";
 import { TIME_VALUE_OF_MONEY_TEMPLATES } from "./time-value-of-money";
 import type { QuestionTemplateDefinition } from "./types";
 
@@ -20,6 +27,7 @@ export const QUESTION_TEMPLATES: QuestionTemplateDefinition[] = [
   ...LOAN_TEMPLATES,
   ...BOND_TEMPLATES,
   ...ALM_TEMPLATES,
+  ...MULTI_STEP_TEMPLATES,
 ];
 
 export const TEMPLATES_BY_DOMAIN: Record<TopicDomain, QuestionTemplateDefinition[]> =
@@ -36,10 +44,15 @@ export function getTemplateById(id: string): QuestionTemplateDefinition | undefi
 }
 
 /**
- * Blueprint invariant: each domain must supply at least as many distinct
- * templates as the exam draws from it, so a single 30-question exam never
- * repeats the same question structure. Violations are a build-time authoring
- * error, so fail loudly at module load rather than mid-exam.
+ * Authoring invariants, enforced at module load so a bad template fails the
+ * build rather than an exam.
+ *
+ * - template ids are unique;
+ * - a level 3+ item chains at least `MIN_ADVANCED_STEPS` sub-problems and
+ *   combines at least two syllabus areas;
+ * - each domain offers at least as many eligible templates as the blueprint
+ *   draws from it, so no structure repeats inside one sitting;
+ * - each domain offers enough level 3+ items to meet the advanced quota.
  */
 function assertBlueprintCoverage(): void {
   const ids = new Set<string>();
@@ -48,13 +61,36 @@ function assertBlueprintCoverage(): void {
       throw new Error(`Duplicate question template id: ${template.id}`);
     }
     ids.add(template.id);
+
+    if (template.difficulty >= 3) {
+      if (template.steps < MIN_ADVANCED_STEPS) {
+        throw new Error(
+          `${template.id} is level ${template.difficulty} but chains only ${template.steps} steps; ${MIN_ADVANCED_STEPS} are required.`
+        );
+      }
+      if (template.topics.length < 2) {
+        throw new Error(
+          `${template.id} is level ${template.difficulty} but draws on a single syllabus area; level 3+ items must combine at least two.`
+        );
+      }
+    }
   }
 
   for (const domain of DOMAIN_ORDER) {
-    const available = TEMPLATES_BY_DOMAIN[domain]?.length ?? 0;
-    if (available < QUESTIONS_PER_DOMAIN) {
+    const pool = TEMPLATES_BY_DOMAIN[domain] ?? [];
+    const eligible = pool.filter((template) =>
+      DEFAULT_DIFFICULTIES.includes(template.difficulty)
+    );
+    if (eligible.length < QUESTIONS_PER_DOMAIN) {
       throw new Error(
-        `Domain ${domain} has ${available} templates but the exam blueprint draws ${QUESTIONS_PER_DOMAIN}.`
+        `Domain ${domain} offers ${eligible.length} templates at the default difficulties but the blueprint draws ${QUESTIONS_PER_DOMAIN}.`
+      );
+    }
+
+    const advanced = eligible.filter((template) => template.difficulty >= 3);
+    if (advanced.length < MIN_ADVANCED_PER_DOMAIN) {
+      throw new Error(
+        `Domain ${domain} offers ${advanced.length} level 3+ templates but every sitting must draw ${MIN_ADVANCED_PER_DOMAIN}.`
       );
     }
   }

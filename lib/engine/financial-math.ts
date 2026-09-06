@@ -188,6 +188,88 @@ export const ActuarialMath = {
     return (low + high) / 2;
   },
 
+  // ----- Yield curves, forward rates and swaps -----------------------------
+
+  /** Discount factor implied by an annual effective spot rate: P(0,t). */
+  spotDiscountFactor(spot: number, t: number): number {
+    return Math.pow(1 + spot, -t);
+  },
+
+  /**
+   * Discount factors P(0,1..n) for a spot curve given as annual effective
+   * rates, `spots[k]` being the k+1 year spot rate.
+   */
+  spotDiscountFactors(spots: number[]): number[] {
+    return spots.map((spot, index) => this.spotDiscountFactor(spot, index + 1));
+  },
+
+  /** Present value of dated cash flows discounted along a spot curve. */
+  presentValueAtSpots(cashFlows: { t: number; amount: number }[], spots: number[]): number {
+    return cashFlows.reduce(
+      (total, cf) => total + cf.amount * this.spotDiscountFactor(spots[cf.t - 1], cf.t),
+      0
+    );
+  },
+
+  /**
+   * Annualised forward rate covering (t1, t2], implied by the spot curve:
+   * (1 + f)^(t2 - t1) = (1 + s_{t2})^{t2} / (1 + s_{t1})^{t1}.
+   */
+  forwardRate(spots: number[], t1: number, t2: number): number {
+    const growthTo2 = Math.pow(1 + spots[t2 - 1], t2);
+    const growthTo1 = t1 === 0 ? 1 : Math.pow(1 + spots[t1 - 1], t1);
+    return Math.pow(growthTo2 / growthTo1, 1 / (t2 - t1)) - 1;
+  },
+
+  /**
+   * Par swap rate for settlements at times `start+1 .. end`, from discount
+   * factors indexed from time 1. A deferred swap uses start > 0:
+   * R = [P(0,start) - P(0,end)] / sum of P(0,t) over the settlement dates.
+   */
+  swapRate(discountFactors: number[], start: number = 0, end?: number): number {
+    const last = end ?? discountFactors.length;
+    const startFactor = start === 0 ? 1 : discountFactors[start - 1];
+    let annuity = 0;
+    for (let t = start + 1; t <= last; t += 1) annuity += discountFactors[t - 1];
+    return annuity === 0 ? 0 : (startFactor - discountFactors[last - 1]) / annuity;
+  },
+
+  /**
+   * Level annual effective yield equating dated cash flows to a price, by
+   * bisection. Returns NaN when no root exists in (0, 1].
+   */
+  levelYield(
+    cashFlows: { t: number; amount: number }[],
+    price: number,
+    tolerance: number = 1e-12
+  ): number {
+    const valueAt = (rate: number) =>
+      cashFlows.reduce((total, cf) => total + cf.amount * Math.pow(1 + rate, -cf.t), 0);
+
+    let low = 1e-9;
+    let high = 1;
+    if ((valueAt(low) - price) * (valueAt(high) - price) > 0) return NaN;
+
+    for (let iteration = 0; iteration < 200; iteration += 1) {
+      const mid = (low + high) / 2;
+      const diff = valueAt(mid) - price;
+      if (Math.abs(diff) < tolerance || high - low < tolerance) return mid;
+      if (diff > 0) low = mid;
+      else high = mid;
+    }
+    return (low + high) / 2;
+  },
+
+  /**
+   * Present value of a continuously payable annuity whose payment rate grows
+   * linearly, rho(t) = t, over n years at constant force delta:
+   * integral of t e^{-delta t} dt = [1 - e^{-delta n}(1 + delta n)] / delta^2.
+   */
+  continuousIncreasingAnnuity(n: number, delta: number): number {
+    const discount = Math.exp(-delta * n);
+    return (1 - discount * (1 + delta * n)) / (delta * delta);
+  },
+
   // Macaulay Duration of general cash flows: D_mac = sum(t * Ct * v^t) / sum(Ct * v^t)
   macaulayDuration(cashFlows: { t: number; amount: number }[], y: number): number {
     let numerator = 0;

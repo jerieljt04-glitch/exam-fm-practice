@@ -33,7 +33,7 @@ import { Progress } from "./ui/progress";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { useExamTimer } from "@/hooks/useExamTimer";
-import { DOMAIN_LABELS, OPTION_KEYS } from "@/lib/exam-config";
+import { DIFFICULTY_LABELS, DOMAIN_LABELS, OPTION_KEYS } from "@/lib/exam-config";
 import type { ExamSessionData } from "@/lib/types/exam";
 import { cn } from "@/lib/utils";
 
@@ -337,11 +337,18 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
           <section className="flex flex-col gap-4 lg:col-span-3">
             <Card className="flex flex-1 flex-col overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/50 px-6 py-4">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="default" className="uppercase tracking-wide">
                     {DOMAIN_LABELS[currentQuestion.domain]}
                   </Badge>
-                  <span className="hidden text-xs text-muted-foreground sm:inline">
+                  <Badge
+                    variant={currentQuestion.difficulty >= 3 ? "warning" : "muted"}
+                    className="uppercase tracking-wide"
+                    title={`This item chains ${currentQuestion.steps} interdependent steps`}
+                  >
+                    {DIFFICULTY_LABELS[currentQuestion.difficulty]}
+                  </Badge>
+                  <span className="hidden text-xs text-muted-foreground lg:inline">
                     {currentQuestion.templateTitle}
                   </span>
                 </div>

@@ -12,6 +12,9 @@ export const BOND_TEMPLATES: QuestionTemplateDefinition[] = [
     domain: "BONDS",
     title: "Pricing a Semiannual Coupon Bond",
     objective: "Price a bond as the present value of its coupons plus redemption value.",
+    difficulty: 2,
+    topics: ["BONDS_AND_CURVES"],
+    steps: 2,
     generate: (rng) => {
       const par = rng.choice([1000, 10000]);
       const years = rng.choice([10, 15, 20]);
@@ -83,6 +86,9 @@ $$P = ${mathNum(coupon)} \\times ${annuityFactor.toFixed(4)} + ${mathInt(par)} \
     domain: "BONDS",
     title: "Premium Written Down in a Coupon Payment",
     objective: "Compute the principal adjustment column of a bond amortization schedule.",
+    difficulty: 2,
+    topics: ["BONDS_AND_CURVES"],
+    steps: 2,
     generate: (rng) => {
       const par = 1000;
       const years = rng.int(8, 15);
@@ -152,6 +158,9 @@ $$p_{${t}} = ${mathNum(excess, 4)} \\times ${rate(Math.pow(1 + y, -(n - t + 1)),
     domain: "BONDS",
     title: "Maximum Price for a Callable Bond",
     objective: "Apply the minimum-yield rule to a bond callable before maturity.",
+    difficulty: 2,
+    topics: ["BONDS_AND_CURVES"],
+    steps: 2,
     generate: (rng) => {
       const par = 1000;
       const firstCallYear = rng.int(5, 8);
@@ -219,6 +228,9 @@ Pricing to maturity would give ${mathMoney(priceIfHeld)}; paying that much and t
     domain: "BONDS",
     title: "Yield to Maturity of a Coupon Bond",
     objective: "Solve the bond pricing equation for the unknown yield rate.",
+    difficulty: 2,
+    topics: ["BONDS_AND_CURVES"],
+    steps: 2,
     generate: (rng) => {
       const par = 1000;
       const n = rng.int(6, 15);
@@ -285,6 +297,9 @@ $$P(${(solvedYield * 100).toFixed(2)}\\%) = ${mathMoney(ActuarialMath.bondPrice(
     domain: "BONDS",
     title: "Book Value Immediately After a Coupon",
     objective: "Value the remaining bond cash flows at the original yield rate.",
+    difficulty: 2,
+    topics: ["BONDS_AND_CURVES"],
+    steps: 2,
     generate: (rng) => {
       const par = 1000;
       const years = rng.choice([8, 10, 12]);
@@ -352,6 +367,9 @@ $$B_{${t}} = ${mathNum(coupon)} \\times ${ActuarialMath.annuityImmediate(remaini
     domain: "BONDS",
     title: "Interest Earned Portion of a Coupon",
     objective: "Separate a coupon into interest earned and principal adjustment.",
+    difficulty: 2,
+    topics: ["BONDS_AND_CURVES"],
+    steps: 2,
     generate: (rng) => {
       const par = 1000;
       const n = rng.int(8, 16);

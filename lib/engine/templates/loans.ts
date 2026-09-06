@@ -12,6 +12,9 @@ export const LOAN_TEMPLATES: QuestionTemplateDefinition[] = [
     domain: "LOANS",
     title: "Level Monthly Amortization Payment",
     objective: "Convert a nominal annual rate to a periodic rate and solve for the level payment.",
+    difficulty: 2,
+    topics: ["TIME_VALUE", "LOAN_MECHANICS"],
+    steps: 2,
     generate: (rng) => {
       const loanAmount = rng.int(15, 50) * 10000;
       const years = rng.choice([15, 20, 25, 30]);
@@ -78,6 +81,9 @@ $$R = \\frac{${mathMoney(loanAmount, 0)}}{${annuityFactor.toFixed(4)}} = ${mathM
     domain: "LOANS",
     title: "Outstanding Loan Balance (Prospective Method)",
     objective: "Value the remaining payments of an amortized loan immediately after a payment.",
+    difficulty: 2,
+    topics: ["LOAN_MECHANICS"],
+    steps: 2,
     generate: (rng) => {
       const loanAmount = rng.int(10, 30) * 10000;
       const n = rng.int(15, 30);
@@ -91,7 +97,9 @@ $$R = \\frac{${mathMoney(loanAmount, 0)}}{${annuityFactor.toFixed(4)}} = ${mathM
       const beforePayment = payment * ActuarialMath.annuityImmediate(n - t + 1, i);
       const straightLine = (loanAmount * (n - t)) / n;
       const dueVersion = payment * ActuarialMath.annuityDue(n - t, i);
-      const paymentsSubtracted = loanAmount - t * payment;
+      // Accumulates the loan but forgets to accumulate the repayments. Always
+      // positive, unlike the naive `L - tR`, which can imply a negative balance.
+      const unaccumulatedPayments = loanAmount * Math.pow(1 + i, t) - payment * t;
 
       return {
         questionText: `A loan of ${moneyInt(loanAmount)} is repaid with equal annual payments at the end of each year for ${n} years at an annual effective interest rate of ${pct(i)}.
@@ -115,9 +123,9 @@ Calculate the outstanding loan balance immediately after the $${ordinal(t)}$ pay
             "Assumed straight-line amortization $L \\cdot \\frac{n-t}{n}$; in a level-payment loan the early payments are mostly interest, so the balance falls far more slowly than linearly."
           ),
           distractor(
-            paymentsSubtracted,
+            unaccumulatedPayments,
             "CALCULATION_DISTRACTOR",
-            "Subtracted total payments made from the original principal, $L - tR$, ignoring the interest contained in each payment."
+            "Accumulated the original principal to time $t$ but subtracted the payments without accumulating them, using $L(1+i)^t - tR$ in place of the retrospective balance $L(1+i)^t - R\\,s_{\\overline{t}|i}$."
           ),
         ],
         format: "CURRENCY",
@@ -140,6 +148,9 @@ $$B_{${t}} = ${mathNum(payment)} \\times ${remainingFactor.toFixed(4)} = ${mathM
     domain: "LOANS",
     title: "Principal Component of an Amortization Payment",
     objective: "Split a level loan payment into its principal repayment component.",
+    difficulty: 2,
+    topics: ["LOAN_MECHANICS"],
+    steps: 2,
     generate: (rng) => {
       const loanAmount = rng.int(8, 25) * 10000;
       const n = rng.int(10, 20);
@@ -201,6 +212,9 @@ $$P_{${t}} = ${mathNum(payment)} \\times ${rate(Math.pow(ActuarialMath.v(i), n -
     domain: "LOANS",
     title: "Interest Component of an Amortization Schedule",
     objective: "Compute the interest contained in a specified line of an amortization schedule.",
+    difficulty: 2,
+    topics: ["LOAN_MECHANICS"],
+    steps: 2,
     generate: (rng) => {
       const loanAmount = rng.int(6, 20) * 10000;
       const n = rng.int(12, 25);
@@ -264,6 +278,9 @@ $$I_{${t}} = ${mathNum(payment)} \\left(1 - ${rate(Math.pow(ActuarialMath.v(i), 
     domain: "LOANS",
     title: "Total Annual Outlay under a Sinking Fund",
     objective: "Combine loan service interest with a sinking-fund deposit accumulated at a different rate.",
+    difficulty: 2,
+    topics: ["LOAN_MECHANICS"],
+    steps: 2,
     generate: (rng) => {
       const loanAmount = rng.int(10, 40) * 10000;
       const n = rng.int(8, 18);
@@ -329,6 +346,9 @@ $$I + D = ${mathNum(interestService)} + ${mathNum(sinkingDeposit)} = ${mathMoney
     domain: "LOANS",
     title: "Solving for the Term of a Loan",
     objective: "Invert the annuity-immediate factor to find the unknown number of payments.",
+    difficulty: 2,
+    topics: ["LOAN_MECHANICS"],
+    steps: 2,
     generate: (rng) => {
       const loanAmount = rng.int(10, 35) * 5000;
       const i = rng.float(0.05, 0.09, 3);

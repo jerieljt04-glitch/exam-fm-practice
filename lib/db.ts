@@ -1,6 +1,8 @@
 import {
   DOMAIN_LABELS,
   DOMAIN_ORDER,
+  type DifficultyLevel,
+  type SyllabusTopic,
   EXAM_DURATION_SECONDS,
   EXAM_TOTAL_QUESTIONS,
   PASS_MARK,
@@ -9,7 +11,6 @@ import {
 import { SEED_VARIABLE_KEY, examGenerator } from "./engine/generator";
 import { QUESTION_TEMPLATES, getTemplateById } from "./engine/templates";
 import { createRng } from "./engine/random";
-import { solutionVideoUrl } from "./engine/video-library";
 import { prisma } from "./prisma";
 import type {
   DomainMetric,
@@ -102,34 +103,44 @@ function recoverSolution(row: {
   templateId: string;
   renderedQuestion: string;
   variables: unknown;
-}): { solutionSteps: string; objective: string; templateTitle: string } {
+}): {
+  solutionSteps: string;
+  objective: string;
+  templateTitle: string;
+  difficulty: DifficultyLevel;
+  topics: SyllabusTopic[];
+  steps: number;
+} {
   const template = getTemplateById(row.templateId);
   if (!template) {
     return {
       solutionSteps: "A worked solution is unavailable because this question template was retired.",
       objective: "",
       templateTitle: row.templateId,
+      difficulty: 2,
+      topics: [],
+      steps: 1,
     };
   }
+
+  const metadata = {
+    objective: template.objective,
+    templateTitle: template.title,
+    difficulty: template.difficulty,
+    topics: template.topics,
+    steps: template.steps,
+  };
 
   const seed = seedOf(row.variables);
   if (seed) {
     const replay = template.generate(createRng(seed));
     if (replay.questionText === row.renderedQuestion) {
-      return {
-        solutionSteps: replay.solutionSteps,
-        objective: template.objective,
-        templateTitle: template.title,
-      };
+      return { solutionSteps: replay.solutionSteps, ...metadata };
     }
   }
 
   const reference = template.generate(createRng(template.id));
-  return {
-    solutionSteps: reference.solutionSteps,
-    objective: template.objective,
-    templateTitle: template.title,
-  };
+  return { solutionSteps: reference.solutionSteps, ...metadata };
 }
 
 export const examRepository = {
@@ -143,7 +154,6 @@ export const examRepository = {
             domain: template.domain,
             templateText: sample.questionText,
             solutionSteps: sample.solutionSteps,
-            videoUrl: solutionVideoUrl(template.id),
             parameterSchema: sample.variables as object,
           };
           await prisma.questionTemplate.upsert({
@@ -232,6 +242,9 @@ export const examRepository = {
             templateId: question.templateId,
             templateTitle: recovered.templateTitle,
             objective: recovered.objective,
+            difficulty: recovered.difficulty,
+            topics: recovered.topics,
+            steps: recovered.steps,
             domain: question.template.domain as TopicDomain,
             renderedQuestion: question.renderedQuestion,
             renderedOptions: question.renderedOptions,
@@ -240,7 +253,6 @@ export const examRepository = {
             variables: question.variables ?? {},
             isCorrect: question.isCorrect,
             solutionSteps: recovered.solutionSteps,
-            videoUrl: question.template.videoUrl ?? "",
           };
         });
 

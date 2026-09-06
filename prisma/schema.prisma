@@ -20,7 +20,6 @@ model QuestionTemplate {
   domain          TopicDomain
   templateText    String
   solutionSteps   String
-  videoUrl        String
   parameterSchema Json
   generatedItems  ExamQuestion[]
 }

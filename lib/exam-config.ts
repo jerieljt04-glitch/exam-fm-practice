@@ -54,6 +54,54 @@ export const DOMAIN_DESCRIPTIONS: Record<TopicDomain, string> = {
     "Duration, convexity, price sensitivity, Redington and full immunization.",
 };
 
+/**
+ * Difficulty taxonomy.
+ *
+ * 1 — Basic: a direct one- or two-step evaluation. Excluded from generated
+ *     exams by default; available only when explicitly requested.
+ * 2 — Intermediate: two cash flow streams equated across one structural change.
+ * 3 — Advanced: a chain of at least three interdependent sub-problems spanning
+ *     two or more syllabus areas.
+ * 4 — Elite synthesis: multi-period state tracking, refinancing, swaps or
+ *     portfolio-level immunization.
+ */
+export type DifficultyLevel = 1 | 2 | 3 | 4;
+
+export const DIFFICULTY_LABELS: Record<DifficultyLevel, string> = {
+  1: "Basic",
+  2: "Intermediate",
+  3: "Advanced",
+  4: "Elite synthesis",
+};
+
+/** Level 3 and above must chain at least this many sub-problems. */
+export const MIN_ADVANCED_STEPS = 3;
+
+/** Difficulties drawn by a standard sitting. Level 1 is opt-in only. */
+export const DEFAULT_DIFFICULTIES: readonly DifficultyLevel[] = [2, 3, 4] as const;
+
+/** Every sitting draws at least this many level 3+ items from each domain. */
+export const MIN_ADVANCED_PER_DOMAIN = 2;
+
+/**
+ * Syllabus areas a question can draw on. A level 3+ item must combine at
+ * least two of them.
+ */
+export type SyllabusTopic =
+  | "TIME_VALUE"
+  | "LOAN_MECHANICS"
+  | "BONDS_AND_CURVES"
+  | "IMMUNIZATION"
+  | "SWAPS";
+
+export const TOPIC_LABELS: Record<SyllabusTopic, string> = {
+  TIME_VALUE: "Time value & varying annuities",
+  LOAN_MECHANICS: "Loans, sinking funds & refinancing",
+  BONDS_AND_CURVES: "Bonds, spot & forward rates",
+  IMMUNIZATION: "Duration, convexity & immunization",
+  SWAPS: "Interest rate swaps",
+};
+
 /** Proficiency bands applied to each domain in the review report. */
 export function proficiencyStatus(
   percentage: number

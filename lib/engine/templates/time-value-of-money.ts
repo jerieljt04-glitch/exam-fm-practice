@@ -11,6 +11,9 @@ export const TIME_VALUE_OF_MONEY_TEMPLATES: QuestionTemplateDefinition[] = [
     domain: "TIME_VALUE_OF_MONEY",
     title: "Accumulation under a Variable Force of Interest",
     objective: "Integrate a time-varying force of interest to accumulate a single deposit.",
+    difficulty: 2,
+    topics: ["TIME_VALUE"],
+    steps: 2,
     generate: (rng) => {
       const deposit = rng.int(2, 10) * 1000;
       const a = rng.float(0.02, 0.04, 3);
@@ -73,6 +76,9 @@ $$A(${t}) = ${mathMoney(deposit, 0)} \\cdot e^{${rate(integral, 5)}} = ${mathMon
     domain: "TIME_VALUE_OF_MONEY",
     title: "Equivalence of Nominal Discount and Effective Interest",
     objective: "Convert a nominal discount rate compounded p times a year into an annual effective interest rate.",
+    difficulty: 2,
+    topics: ["TIME_VALUE"],
+    steps: 2,
     generate: (rng) => {
       const dNominal = rng.float(0.05, 0.09, 3);
       const p = rng.choice([2, 4, 12]);
@@ -129,6 +135,9 @@ $$i = \\frac{1}{${rate(annualDiscountFactor)}} - 1 = ${(iEffective * 100).toFixe
     domain: "TIME_VALUE_OF_MONEY",
     title: "Equation of Value with Deferred Deposits",
     objective: "Accumulate multiple deposits made at different times to a common valuation date.",
+    difficulty: 2,
+    topics: ["TIME_VALUE"],
+    steps: 2,
     generate: (rng) => {
       const i = rng.float(0.04, 0.08, 3);
       const c1 = rng.int(2, 6) * 1000;
@@ -193,6 +202,9 @@ $$AV_{${valuationTime}} = ${mathNum(c1 * factor1)} + ${mathNum(c2 * factor2)} = 
     domain: "TIME_VALUE_OF_MONEY",
     title: "Converting a Nominal Interest Rate to a Nominal Discount Rate",
     objective: "Move between nominal interest and nominal discount rates with different compounding frequencies.",
+    difficulty: 2,
+    topics: ["TIME_VALUE"],
+    steps: 2,
     generate: (rng) => {
       const m = rng.choice([2, 4]);
       const p = rng.choice([4, 12]);
@@ -256,6 +268,9 @@ $$d^{(${p})} = ${p}\\left[1 - ${rate(Math.pow(1 + iEffective, -1 / p))}\\right] 
     domain: "TIME_VALUE_OF_MONEY",
     title: "Time Required for a Fund to Reach a Target",
     objective: "Solve an equation of value for the unknown time using logarithms.",
+    difficulty: 2,
+    topics: ["TIME_VALUE"],
+    steps: 2,
     generate: (rng) => {
       const principal = rng.int(3, 12) * 1000;
       const multiple = rng.choice([2, 2.5, 3]);
@@ -314,6 +329,9 @@ $$t = \\frac{${rate(Math.log(multiple))}}{${rate(Math.log(1 + i))}} = ${correctV
     domain: "TIME_VALUE_OF_MONEY",
     title: "Present Value under a Constant Force of Interest",
     objective: "Discount a single future payment continuously at a constant force of interest.",
+    difficulty: 1,
+    topics: ["TIME_VALUE"],
+    steps: 1,
     generate: (rng) => {
       const futureValue = rng.int(15, 60) * 1000;
       const delta = rng.float(0.03, 0.08, 3);

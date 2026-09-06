@@ -1,8 +1,11 @@
 import {
+  DEFAULT_DIFFICULTIES,
   DOMAIN_ORDER,
   EXAM_TOTAL_QUESTIONS,
+  MIN_ADVANCED_PER_DOMAIN,
   OPTION_KEYS,
   QUESTIONS_PER_DOMAIN,
+  type DifficultyLevel,
   type OptionKey,
 } from "../exam-config";
 import type { ExamQuestionData, RenderedOption } from "../types/exam";
@@ -10,7 +13,6 @@ import { money, num } from "./format";
 import { createRng, type Rng } from "./random";
 import { QUESTION_TEMPLATES, TEMPLATES_BY_DOMAIN, getTemplateById } from "./templates";
 import type { AnswerFormat, QuestionTemplateDefinition } from "./templates/types";
-import { solutionVideoUrl } from "./video-library";
 
 export interface GenerateExamOptions {
   sessionId: string;
@@ -21,6 +23,11 @@ export interface GenerateExamOptions {
    * so the exam can be regenerated later from persisted state.
    */
   seed?: string;
+  /**
+   * Difficulty levels eligible for this sitting. Defaults to levels 2-4;
+   * level 1 is drawn only when a caller asks for it explicitly.
+   */
+  difficulties?: readonly DifficultyLevel[];
 }
 
 /** Key under which each question stores the seed that produced its parameters. */
@@ -38,6 +45,8 @@ export function formatAnswer(value: number, format: AnswerFormat): string {
       return money(value, 2);
     case "PERCENT":
       return `${value.toFixed(2)}%`;
+    case "BASIS_POINTS":
+      return `${num(value, 1)} bps`;
     case "YEARS":
       return `${num(value, 2)} years`;
     case "DECIMAL_4":
@@ -46,6 +55,20 @@ export function formatAnswer(value: number, format: AnswerFormat): string {
     default:
       return value.toFixed(2);
   }
+}
+
+/**
+ * Rejects a distractor that no examiner would print: a non-finite value, a
+ * negative amount where the quantity must be positive (an outstanding loan
+ * balance of -\$10,207 gives the answer away), or a value orders of magnitude
+ * away from the correct one.
+ */
+function isPlausibleDistractor(value: number, correctValue: number): boolean {
+  if (!Number.isFinite(value)) return false;
+  if (correctValue > 0 && value <= 0) return false;
+  const reference = Math.abs(correctValue) || 1;
+  const ratio = Math.abs(value) / reference;
+  return ratio >= 0.02 && ratio <= 50;
 }
 
 interface CandidateOption {
@@ -92,7 +115,7 @@ export class QuestionGenerator {
 
     for (const item of generated.distractors) {
       if (candidates.length >= OPTION_KEYS.length) break;
-      if (!Number.isFinite(item.value)) continue;
+      if (!isPlausibleDistractor(item.value, generated.correctValue)) continue;
 
       let value = item.value;
       let text = formatAnswer(value, generated.format);
@@ -106,7 +129,7 @@ export class QuestionGenerator {
         value = item.value * factor;
         text = formatAnswer(value, generated.format);
       }
-      if (usedTexts.has(text)) continue;
+      if (usedTexts.has(text) || !isPlausibleDistractor(value, generated.correctValue)) continue;
 
       usedTexts.add(text);
       candidates.push({
@@ -156,6 +179,9 @@ export class QuestionGenerator {
       templateId: template.id,
       templateTitle: template.title,
       objective: template.objective,
+      difficulty: template.difficulty,
+      topics: template.topics,
+      steps: template.steps,
       domain: template.domain,
       renderedQuestion: generated.questionText,
       renderedOptions,
@@ -164,7 +190,6 @@ export class QuestionGenerator {
       variables: { ...generated.variables, [SEED_VARIABLE_KEY]: seed },
       isCorrect: null,
       solutionSteps: generated.solutionSteps,
-      videoUrl: solutionVideoUrl(template.id),
     };
   }
 
@@ -177,6 +202,7 @@ export class QuestionGenerator {
       sessionId,
       totalQuestions = EXAM_TOTAL_QUESTIONS,
       seed = `${sessionId}-${Date.now()}`,
+      difficulties = DEFAULT_DIFFICULTIES,
     } = options;
 
     const rng = createRng(seed);
@@ -184,15 +210,28 @@ export class QuestionGenerator {
     const selected: QuestionTemplateDefinition[] = [];
 
     for (const domain of DOMAIN_ORDER) {
-      const pool = TEMPLATES_BY_DOMAIN[domain] ?? [];
+      const pool = (TEMPLATES_BY_DOMAIN[domain] ?? []).filter((template) =>
+        difficulties.includes(template.difficulty)
+      );
       if (pool.length === 0) continue;
 
-      const shuffled = rng.shuffle(pool);
-      for (let i = 0; i < perDomain; i += 1) {
-        // The blueprint invariant guarantees pool.length >= perDomain; the
+      // Seat the advanced quota first, then fill the remainder from whatever is
+      // left, so every domain contributes multi-step synthesis questions rather
+      // than only the intermediate items that happen to shuffle to the front.
+      const advanced = rng.shuffle(pool.filter((template) => template.difficulty >= 3));
+      const quota = Math.min(MIN_ADVANCED_PER_DOMAIN, advanced.length, perDomain);
+      const chosen = advanced.slice(0, quota);
+
+      const remainder = rng.shuffle(pool.filter((template) => !chosen.includes(template)));
+      let cursor = 0;
+      while (chosen.length < perDomain) {
+        // The blueprint invariant guarantees enough distinct templates; the
         // modulo only guards a caller asking for more than the blueprint size.
-        selected.push(shuffled[i % shuffled.length]);
+        chosen.push(remainder[cursor % remainder.length]);
+        cursor += 1;
       }
+
+      selected.push(...chosen.slice(0, perDomain));
     }
 
     // Top up if totalQuestions is not divisible by the number of domains.

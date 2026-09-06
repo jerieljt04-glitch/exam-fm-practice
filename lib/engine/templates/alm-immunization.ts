@@ -12,6 +12,9 @@ export const ALM_TEMPLATES: QuestionTemplateDefinition[] = [
     domain: "ALM_IMMUNIZATION",
     title: "Macaulay Duration of a Coupon Bond",
     objective: "Compute the present-value weighted average time of a bond's cash flows.",
+    difficulty: 2,
+    topics: ["BONDS_AND_CURVES", "IMMUNIZATION"],
+    steps: 2,
     generate: (rng) => {
       const par = 1000;
       const n = rng.choice([3, 4, 5]);
@@ -83,6 +86,9 @@ $$D_{\\text{mac}} = \\frac{${mathNum(correctValue * price)}}{${mathNum(price)}} 
     domain: "ALM_IMMUNIZATION",
     title: "First-Order Price Sensitivity from Modified Duration",
     objective: "Estimate a price change from modified duration and a yield shift in basis points.",
+    difficulty: 1,
+    topics: ["IMMUNIZATION"],
+    steps: 1,
     generate: (rng) => {
       const price = rng.int(90, 115) * 10;
       const modifiedDuration = rng.float(4.5, 9.5, 2);
@@ -148,6 +154,9 @@ $$P_{\\text{new}} = ${mathInt(price)} + (${mathNum(priceChange)}) = ${mathMoney(
     domain: "ALM_IMMUNIZATION",
     title: "Redington Immunization Asset Allocation",
     objective: "Match present value and duration of assets to a single liability.",
+    difficulty: 3,
+    topics: ["TIME_VALUE", "IMMUNIZATION"],
+    steps: 3,
     generate: (rng) => {
       const liabilityTime = rng.choice([6, 8, 10]);
       const liability = rng.int(10, 30) * 10000;
@@ -216,6 +225,9 @@ $$A_1 = PV(A_1)(1 + ${y})^{${t1}} = ${mathNum(asset1Pv)} \\times ${rate(Math.pow
     domain: "ALM_IMMUNIZATION",
     title: "Full Immunization with Cash Flows Straddling the Liability",
     objective: "Solve the full immunization conditions for the asset maturing before the liability.",
+    difficulty: 3,
+    topics: ["TIME_VALUE", "IMMUNIZATION"],
+    steps: 3,
     generate: (rng) => {
       const liability = rng.int(20, 60) * 10000;
       const liabilityTime = rng.int(8, 14);
@@ -280,6 +292,9 @@ $$A = ${mathMoney(correctValue)}$$`,
     domain: "ALM_IMMUNIZATION",
     title: "Modified Convexity of a Zero-Coupon Bond",
     objective: "Apply the convexity definition to a single future cash flow.",
+    difficulty: 1,
+    topics: ["IMMUNIZATION"],
+    steps: 1,
     generate: (rng) => {
       const n = rng.int(5, 20);
       const y = rng.float(0.03, 0.08, 3);
@@ -339,6 +354,9 @@ $$C_{\\text{mod}} = \\frac{${n}(${n + 1})}{(1 + ${y})^{2}} = \\frac{${n * (n + 1
     domain: "ALM_IMMUNIZATION",
     title: "Macaulay Duration of a Level Annuity",
     objective: "Express the duration of a level annuity as a ratio of annuity factors.",
+    difficulty: 2,
+    topics: ["TIME_VALUE", "IMMUNIZATION"],
+    steps: 2,
     generate: (rng) => {
       const n = rng.int(8, 20);
       const i = rng.float(0.04, 0.09, 3);

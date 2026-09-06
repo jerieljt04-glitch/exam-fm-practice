@@ -12,6 +12,9 @@ export const ANNUITY_TEMPLATES: QuestionTemplateDefinition[] = [
     domain: "ANNUITIES",
     title: "Present Value of a Level Annuity-Immediate",
     objective: "Value a level end-of-period payment stream with the annuity-immediate factor.",
+    difficulty: 1,
+    topics: ["TIME_VALUE"],
+    steps: 1,
     generate: (rng) => {
       const payment = rng.int(10, 40) * 100;
       const n = rng.int(8, 20);
@@ -73,6 +76,9 @@ $$PV = ${mathMoney(payment, 0)} \\times ${annuityFactor.toFixed(4)} = ${mathMone
     domain: "ANNUITIES",
     title: "Present Value of an Arithmetically Increasing Annuity",
     objective: "Apply the increasing annuity factor to a payment stream growing by a constant amount.",
+    difficulty: 2,
+    topics: ["TIME_VALUE"],
+    steps: 2,
     generate: (rng) => {
       const n = rng.int(10, 20);
       const i = rng.float(0.04, 0.07, 3);
@@ -136,6 +142,9 @@ $$PV = ${mathInt(base)} \\times ${increasingFactor.toFixed(4)} = ${mathMoney(cor
     domain: "ANNUITIES",
     title: "Perpetuity with Geometrically Growing Payments",
     objective: "Value an infinite payment stream growing at a constant rate below the interest rate.",
+    difficulty: 1,
+    topics: ["TIME_VALUE"],
+    steps: 1,
     generate: (rng) => {
       const firstPayment = rng.int(1, 5) * 1000;
       const g = rng.float(0.02, 0.035, 3);
@@ -194,6 +203,9 @@ $$PV = \\frac{${mathInt(firstPayment)}}{${i} - ${g}} = \\frac{${mathInt(firstPay
     domain: "ANNUITIES",
     title: "Accumulated Value of an Annuity-Due",
     objective: "Accumulate beginning-of-period deposits to the end of the final period.",
+    difficulty: 1,
+    topics: ["TIME_VALUE"],
+    steps: 1,
     generate: (rng) => {
       const deposit = rng.int(15, 60) * 100;
       const n = rng.int(10, 25);
@@ -255,6 +267,9 @@ $$AV = ${mathMoney(deposit, 0)} \\times ${dueFactor.toFixed(4)} = ${mathMoney(co
     domain: "ANNUITIES",
     title: "Present Value of a Deferred Annuity-Immediate",
     objective: "Discount a level annuity whose first payment is delayed by a whole number of years.",
+    difficulty: 2,
+    topics: ["TIME_VALUE"],
+    steps: 2,
     generate: (rng) => {
       const payment = rng.int(20, 60) * 100;
       const n = rng.int(8, 15);
@@ -318,6 +333,9 @@ $$PV = ${mathMoney(payment, 0)} \\times ${rate(Math.pow(v, deferral))} \\times $
     domain: "ANNUITIES",
     title: "Present Value of a Continuously Payable Annuity",
     objective: "Value a continuous payment stream using the force of interest.",
+    difficulty: 2,
+    topics: ["TIME_VALUE"],
+    steps: 2,
     generate: (rng) => {
       const annualRate = rng.int(20, 80) * 100;
       const n = rng.int(6, 18);

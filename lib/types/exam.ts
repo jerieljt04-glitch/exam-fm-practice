@@ -1,4 +1,4 @@
-import type { OptionKey } from "../exam-config";
+import type { DifficultyLevel, OptionKey, SyllabusTopic } from "../exam-config";
 
 export type TopicDomain =
   | "TIME_VALUE_OF_MONEY"
@@ -32,6 +32,11 @@ export interface ExamQuestionData {
   templateTitle: string;
   /** The syllabus skill assessed, shown in the review report. */
   objective: string;
+  difficulty: DifficultyLevel;
+  /** Syllabus areas this item combines. */
+  topics: SyllabusTopic[];
+  /** Number of interdependent sub-problems the candidate must chain. */
+  steps: number;
   domain: TopicDomain;
   renderedQuestion: string;
   renderedOptions: RenderedOption[];
@@ -41,8 +46,6 @@ export interface ExamQuestionData {
   variables: Record<string, unknown>;
   isCorrect: boolean | null;
   solutionSteps: string;
-  /** Empty when no walkthrough video is configured for the template. */
-  videoUrl: string;
 }
 
 export type ExamStatus = "IN_PROGRESS" | "PAUSED" | "COMPLETED";
