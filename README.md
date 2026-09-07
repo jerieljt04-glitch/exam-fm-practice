@@ -23,21 +23,50 @@ interdependent sub-problems across two or more syllabus areas.
 
 ---
 
-## Getting started
+## Opening it as an application
+
+Build the macOS app once:
+
+```bash
+npm install && npm run app:build
+```
+
+That produces **Exam FM Practice.app** in `~/Applications` — double-click it, or drag it to the
+Dock. It appears in Spotlight and Launchpad like any other app.
+
+The app owns no logic of its own. It starts the same production server `npm start` runs, waits
+for it to answer, and opens the exam in your browser; quitting the app stops the server. On the
+first launch it installs dependencies and builds if needed (about a minute, with a notification),
+and it rebuilds automatically whenever the source files are newer than the last build. Anything
+that goes wrong is reported in a dialog, with detail in `~/Library/Logs/exam-fm-practice.log`.
+
+It serves on port **4173** rather than 3000, so it never collides with a `npm run dev` session.
+Set `EXAM_FM_PORT` before `npm run app:build` to change that.
+
+The repository path is baked into the app at build time, so re-run `npm run app:build` if you
+move the project.
+
+## Running it from a terminal instead
 
 ```bash
 npm install
+npm run dev                   # http://localhost:3000, with hot reload
+```
+
+For a production server without the app wrapper: `npm run build && npm start`.
+
+### Optional: PostgreSQL
+
+```bash
 cp .env.example .env          # then set DATABASE_URL
 npm run prisma:generate
 npm run db:push               # creates the tables
-npm run prisma:seed           # upserts the 30 question templates
-npm run dev                   # http://localhost:3000
+npm run prisma:seed           # upserts the question templates
 ```
 
-**PostgreSQL is optional for a first look.** If `DATABASE_URL` is unreachable, a circuit
-breaker opens after the first failed query, one warning is logged, and the platform runs
-entirely from an in-memory session store — every feature works, but sittings do not survive
-a server restart.
+**PostgreSQL is optional.** If `DATABASE_URL` is unreachable, a circuit breaker opens after the
+first failed query, one warning is logged, and the platform runs entirely from an in-memory
+session store — every feature works, but sittings do not survive a server restart.
 
 ### Environment variables
 
@@ -88,13 +117,23 @@ areas, and the test suite fails if its rendered solution shows fewer than three 
 
 | Domain | Templates | Covers |
 | --- | --- | --- |
-| Time Value of Money | 8 | force of interest, rate equivalence, equations of value, piecewise forces feeding a loan, dollar- vs time-weighted yields |
-| Annuities & Cash Flows | 9 | level, due, deferred, increasing, continuous, growing perpetuities, increasing-then-level streams, pricing off a spot curve |
+| Time Value of Money | 10 | force of interest, rate equivalence, equations of value, piecewise forces feeding a loan, dollar- vs time-weighted yields, inflation and real returns |
+| Annuities & Cash Flows | 10 | level, due, deferred, increasing, continuous, growing perpetuities, increasing-then-level streams, pricing off a spot curve, reinvestment yields |
 | Loans & Amortization | 9 | level payments, balances, principal/interest split, sinking funds, mid-term switch to a sinking fund, drop payments, rate-reset refinancing |
 | Bonds | 8 | pricing, book value, premium write-down, interest earned, yield to maturity, callable bonds, spot-curve pricing into duration, a fund purchase into a guaranteed yield |
-| Asset-Liability Management | 9 | Macaulay and modified duration, convexity, Redington and full immunization, annuity-liability immunization, deferred swap rates, seasoned swap valuation |
+| Asset-Liability Management | 11 | Macaulay and modified duration, convexity, Redington and full immunization, annuity-liability immunization, second-order price approximation, deferred swap rates, seasoned swap valuation, swaps on an amortizing notional |
 
-Forty-three templates in total, of which fifteen are level 3+.
+Forty-seven templates in total, of which nineteen are level 3+.
+
+### Relationship to the SOA sample questions
+
+Coverage and difficulty are calibrated against the Society of Actuaries' published *Exam FM
+Sample Questions* (202 items). That document is copyrighted by the SOA, so its questions are not
+reproduced here; it was used to check which archetypes a candidate actually meets and to close
+the gaps — determinants of interest rates, reinvestment yields, second-order price
+approximation, deferred and amortizing swaps. Every question this platform asks is generated,
+with fresh parameters each sitting, which is also what keeps repeated practice useful once the
+sample set has been memorised.
 
 ## File structure
 
@@ -141,7 +180,7 @@ lib/
       loans.ts                   |
       bonds.ts                   |
       alm-immunization.ts       /
-      multi-step.ts             13 level 3-4 synthesis templates
+      multi-step.ts             17 level 3-4 synthesis templates
       index.ts                  library, domain index, authoring invariants
 
 prisma/
@@ -149,6 +188,8 @@ prisma/
   seed.ts                       upserts a reference instance of each template
 
 scripts/
+  build-desktop-app.sh          builds Exam FM Practice.app
+  make-icon.py                  dependency-free icon generator
   test-markup.ts                tokenizer regression tests
   test-engine.ts                blueprint, option, determinism and grading tests
 ```

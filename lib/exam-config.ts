@@ -92,7 +92,8 @@ export type SyllabusTopic =
   | "LOAN_MECHANICS"
   | "BONDS_AND_CURVES"
   | "IMMUNIZATION"
-  | "SWAPS";
+  | "SWAPS"
+  | "RATE_DETERMINANTS";
 
 export const TOPIC_LABELS: Record<SyllabusTopic, string> = {
   TIME_VALUE: "Time value & varying annuities",
@@ -100,6 +101,7 @@ export const TOPIC_LABELS: Record<SyllabusTopic, string> = {
   BONDS_AND_CURVES: "Bonds, spot & forward rates",
   IMMUNIZATION: "Duration, convexity & immunization",
   SWAPS: "Interest rate swaps",
+  RATE_DETERMINANTS: "Determinants of interest rates",
 };
 
 /** Proficiency bands applied to each domain in the review report. */

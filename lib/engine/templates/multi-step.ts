@@ -1292,4 +1292,404 @@ $$A_{${longMaturity}} = ${mathNum(longPv)} \\times (1 + ${i})^{${longMaturity}} 
       };
     },
   },
+
+  // ==========================================================================
+  // Archetypes calibrated against the SOA Exam FM sample question set:
+  // determinants of interest rates, reinvestment yields, second-order price
+  // approximation, and swaps on an amortizing notional.
+  // ==========================================================================
+  {
+    id: "TVM_REAL_ACCUMULATION",
+    domain: "TIME_VALUE_OF_MONEY",
+    title: "Real Value of a Savings Stream under Inflation",
+    objective:
+      "Accumulate deposits at the nominal rate, then restate the fund in the purchasing power of the deposit date.",
+    difficulty: 3,
+    topics: ["TIME_VALUE", "RATE_DETERMINANTS"],
+    steps: 3,
+    generate: (rng) => {
+      const deposit = rng.int(15, 60) * 100;
+      const n = rng.int(10, 22);
+      const nominal = rng.float(0.05, 0.09, 3);
+      const inflation = rng.float(0.018, 0.038, 3);
+
+      const accumulationFactor = ActuarialMath.accumulatedAnnuityImmediate(n, nominal);
+      const nominalValue = deposit * accumulationFactor;
+      const deflator = Math.pow(1 + inflation, -n);
+      const correctValue = nominalValue * deflator;
+
+      const realRate = (1 + nominal) / (1 + inflation) - 1;
+      const noDeflation = nominalValue;
+      const realRateOnDeposits = deposit * ActuarialMath.accumulatedAnnuityImmediate(n, realRate);
+      const subtractedRates =
+        deposit * ActuarialMath.accumulatedAnnuityImmediate(n, nominal - inflation);
+      const linearDeflator = nominalValue * (1 - inflation * n);
+
+      return {
+        questionText: `A saver deposits ${moneyInt(deposit)} at the end of each year for ${n} years into an account earning an annual effective interest rate of ${pct(nominal)}. Over the same period the annual rate of inflation is ${pct(inflation)}.
+Calculate the accumulated value of the account at the end of year ${n}, expressed in the purchasing power of money at time $t = 0$.`,
+        variables: { deposit, n, nominal, inflation },
+        correctValue,
+        distractors: [
+          distractor(
+            noDeflation,
+            "CALCULATION_DISTRACTOR",
+            `Reported the nominal fund of ${money(nominalValue)} without restating it in time-0 purchasing power.`
+          ),
+          distractor(
+            realRateOnDeposits,
+            "NOMINAL_RATE_ERROR",
+            `Accumulated the deposits at the real rate ${pct(realRate)}. The deposits themselves are nominal amounts, so they must accumulate at the nominal rate and the *fund* is then deflated once.`
+          ),
+          distractor(
+            subtractedRates,
+            "SIMPLE_INTEREST_ERROR",
+            `Approximated the real rate by subtraction, $i - \\pi = ${mathPct(nominal - inflation)}$, instead of the exact Fisher relation $\\frac{1+i}{1+\\pi} - 1 = ${mathPct(realRate)}$.`
+          ),
+          distractor(
+            linearDeflator,
+            "SIMPLE_INTEREST_ERROR",
+            `Deflated linearly by $1 - \\pi n$ rather than compounding the price level by $(1+\\pi)^{${n}}$.`
+          ),
+        ],
+        format: "CURRENCY",
+        solutionSteps: `**Step 1 — Accumulate the deposits at the nominal rate.**
+$$s_{\\overline{${n}}|${nominal}} = ${num(accumulationFactor, 4)} \\quad\\Longrightarrow\\quad AV = ${mathMoney(deposit, 0)} \\times ${num(accumulationFactor, 4)} = ${mathMoney(nominalValue)}$$
+
+**Step 2 — Build the price-level deflator.**
+Prices at time ${n} stand at $(1 + ${inflation})^{${n}} = ${rate(Math.pow(1 + inflation, n), 4)}$ times their time-0 level, so
+$$\\text{deflator} = (1 + ${inflation})^{-${n}} = ${rate(deflator, 4)}$$
+
+**Step 3 — Restate the fund in time-0 purchasing power.**
+$$AV_{\\text{real}} = ${mathNum(nominalValue)} \\times ${rate(deflator, 4)} = ${mathMoney(correctValue)}$$
+
+Equivalently, the real rate is $\\frac{1 + ${nominal}}{1 + ${inflation}} - 1 = ${mathPct(realRate)}$, but note that discounting the *fund* once is not the same as accumulating the deposits at that real rate.`,
+        checks: [
+          {
+            label: "deflating the nominal fund is not the same as accumulating at the real rate",
+            ok: Math.abs(correctValue - realRateOnDeposits) > 1e-6,
+          },
+          { label: "real value is below the nominal value", ok: correctValue < nominalValue },
+        ],
+      };
+    },
+  },
+
+  {
+    id: "ANNUITY_REINVESTMENT_YIELD",
+    domain: "ANNUITIES",
+    title: "Overall Yield when Payments are Reinvested at a Different Rate",
+    objective:
+      "Accumulate a payment stream at the reinvestment rate, then solve the equation of value for the investor's realised yield.",
+    difficulty: 3,
+    topics: ["TIME_VALUE", "BONDS_AND_CURVES"],
+    steps: 3,
+    generate: (rng) => {
+      const price = rng.int(20, 70) * 1000;
+      const n = rng.int(8, 16);
+      const couponRate = rng.float(0.06, 0.1, 3);
+      const reinvestRate = rng.float(0.025, 0.05, 3);
+
+      const payment = Math.round(price * couponRate);
+      const accumulated =
+        payment * ActuarialMath.accumulatedAnnuityImmediate(n, reinvestRate) + price;
+      const correctValue = Math.pow(accumulated / price, 1 / n) - 1;
+
+      const noReinvestment = couponRate;
+      const reinvestAtOwnRate =
+        Math.pow(
+          (payment * ActuarialMath.accumulatedAnnuityImmediate(n, couponRate) + price) / price,
+          1 / n
+        ) - 1;
+      const forgotRedemption =
+        Math.pow((payment * ActuarialMath.accumulatedAnnuityImmediate(n, reinvestRate)) / price, 1 / n) - 1;
+      const simpleAverage = (couponRate + reinvestRate) / 2;
+
+      return {
+        questionText: `An investor pays ${moneyInt(price)} for a ${n}-year investment that pays ${moneyInt(payment)} at the end of each year and returns the original ${moneyInt(price)} at the end of year ${n}.
+Each annual payment is immediately reinvested in an account earning an annual effective rate of ${pct(reinvestRate)}.
+Calculate the investor's annual effective yield over the ${n}-year period.`,
+        variables: { price, n, couponRate, reinvestRate, payment },
+        correctValue: correctValue * 100,
+        distractors: [
+          distractor(
+            noReinvestment * 100,
+            "CALCULATION_DISTRACTOR",
+            `Reported the ${pct(couponRate)} paid by the investment itself. That is only the realised yield if every payment can be reinvested at ${pct(couponRate)}; here they earn ${pct(reinvestRate)}.`
+          ),
+          distractor(
+            reinvestAtOwnRate * 100,
+            "NOMINAL_RATE_ERROR",
+            `Accumulated the payments at the investment's own rate ${pct(couponRate)} rather than the reinvestment rate ${pct(reinvestRate)}.`
+          ),
+          distractor(
+            forgotRedemption * 100,
+            "CALCULATION_DISTRACTOR",
+            `Omitted the ${moneyInt(price)} returned at maturity from the time-${n} accumulated value.`
+          ),
+          distractor(
+            simpleAverage * 100,
+            "SIMPLE_INTEREST_ERROR",
+            "Averaged the two rates. The realised yield is set by the accumulated value, in which the returned principal earns no reinvestment interest at all."
+          ),
+        ],
+        format: "PERCENT",
+        solutionSteps: `**Step 1 — Accumulate the reinvested payments to time ${n}.**
+$$s_{\\overline{${n}}|${reinvestRate}} = ${num(ActuarialMath.accumulatedAnnuityImmediate(n, reinvestRate), 4)}$$
+$$${mathInt(payment)} \\times ${num(ActuarialMath.accumulatedAnnuityImmediate(n, reinvestRate), 4)} = ${mathMoney(payment * ActuarialMath.accumulatedAnnuityImmediate(n, reinvestRate))}$$
+
+**Step 2 — Add the principal returned at maturity.**
+$$AV = ${mathNum(payment * ActuarialMath.accumulatedAnnuityImmediate(n, reinvestRate))} + ${mathInt(price)} = ${mathMoney(accumulated)}$$
+
+**Step 3 — Solve the equation of value over the whole period.**
+$$${mathInt(price)}\\,(1 + i)^{${n}} = ${mathNum(accumulated)} \\quad\\Longrightarrow\\quad i = \\left(\\frac{${mathNum(accumulated)}}{${mathInt(price)}}\\right)^{1/${n}} - 1$$
+$$i = ${(correctValue * 100).toFixed(2)}\\%$$
+
+The realised yield sits below the ${pct(couponRate)} the investment pays, because each payment can only be reinvested at ${pct(reinvestRate)}.`,
+        checks: [
+          {
+            label: "equation of value balances at the solved yield",
+            ok: Math.abs(price * Math.pow(1 + correctValue, n) - accumulated) < 1e-6 * accumulated,
+          },
+          {
+            label: "realised yield lies between the reinvestment rate and the payment rate",
+            ok: correctValue > reinvestRate && correctValue < couponRate,
+          },
+        ],
+      };
+    },
+  },
+
+  {
+    id: "ALM_SECOND_ORDER_PRICE_CHANGE",
+    domain: "ALM_IMMUNIZATION",
+    title: "Second-Order Price Approximation with Duration and Convexity",
+    objective:
+      "Derive modified duration and modified convexity from a bond's cash flows, then apply the two-term Taylor approximation.",
+    difficulty: 3,
+    topics: ["IMMUNIZATION", "BONDS_AND_CURVES"],
+    steps: 3,
+    generate: (rng) => {
+      const par = 1000;
+      const n = rng.int(8, 18);
+      const couponRate = rng.float(0.04, 0.08, 3);
+      const yieldRate = rng.float(0.035, 0.075, 3);
+      const basisPoints = rng.choice([75, 100, 125, 150]);
+      const shift = basisPoints / 10000;
+
+      const coupon = par * couponRate;
+      const cashFlows = Array.from({ length: n }, (_, index) => ({
+        t: index + 1,
+        amount: index === n - 1 ? coupon + par : coupon,
+      }));
+
+      const price = cashFlows.reduce(
+        (total, cf) => total + cf.amount * Math.pow(1 + yieldRate, -cf.t),
+        0
+      );
+      const macaulay = ActuarialMath.macaulayDuration(cashFlows, yieldRate);
+      const modifiedDuration = macaulay / (1 + yieldRate);
+      const modifiedConvexity = ActuarialMath.modifiedConvexity(cashFlows, yieldRate);
+
+      const firstOrderTerm = -modifiedDuration * shift;
+      const secondOrderTerm = 0.5 * modifiedConvexity * shift * shift;
+      const correctValue = price * (1 + firstOrderTerm + secondOrderTerm);
+
+      const firstOrderOnly = price * (1 + firstOrderTerm);
+      const convexitySignError = price * (1 + firstOrderTerm - secondOrderTerm);
+      const macaulayInstead =
+        price * (1 - macaulay * shift + 0.5 * modifiedConvexity * shift * shift);
+      const noHalf = price * (1 + firstOrderTerm + modifiedConvexity * shift * shift);
+
+      const exactPrice = cashFlows.reduce(
+        (total, cf) => total + cf.amount * Math.pow(1 + yieldRate + shift, -cf.t),
+        0
+      );
+
+      return {
+        questionText: `A ${n}-year bond with par value ${moneyInt(par)} pays annual coupons at an annual rate of ${pct(couponRate)} and is redeemable at par. It is priced at an annual effective yield of ${pct(yieldRate)}.
+The yield rises by ${basisPoints} basis points.
+Using the second-order approximation based on modified duration and modified convexity, estimate the new price of the bond.`,
+        variables: { par, n, couponRate, yieldRate, basisPoints, price },
+        correctValue,
+        distractors: [
+          distractor(
+            firstOrderOnly,
+            "CALCULATION_DISTRACTOR",
+            "Stopped at the first-order term. Convexity is positive for an ordinary bond, so the duration-only estimate always understates the price after a yield rise."
+          ),
+          distractor(
+            convexitySignError,
+            "CALCULATION_DISTRACTOR",
+            "Subtracted the convexity term. The second-order term $\\tfrac{1}{2}C_{\\text{mod}}(\\Delta y)^2$ is positive whichever way the yield moves, because $(\\Delta y)^2 > 0$."
+          ),
+          distractor(
+            macaulayInstead,
+            "NOMINAL_RATE_ERROR",
+            `Used the Macaulay duration ${num(macaulay)} in the first-order term where the modified duration ${num(modifiedDuration)} is required.`
+          ),
+          distractor(
+            noHalf,
+            "SIMPLE_INTEREST_ERROR",
+            "Omitted the factor of one half on the convexity term, which comes from the second term of the Taylor expansion."
+          ),
+        ],
+        format: "CURRENCY",
+        solutionSteps: `**Step 1 — Price the bond and measure its duration.**
+$$P = ${mathMoney(price)}, \\qquad D_{\\text{mac}} = ${num(macaulay, 4)} \\text{ years}$$
+$$D_{\\text{mod}} = \\frac{D_{\\text{mac}}}{1 + y} = \\frac{${num(macaulay, 4)}}{${rate(1 + yieldRate, 4)}} = ${num(modifiedDuration, 4)}$$
+
+**Step 2 — Measure modified convexity.**
+$$C_{\\text{mod}} = \\frac{\\sum t(t+1) C_t v^{\\,t+2}}{P} = ${num(modifiedConvexity, 4)}$$
+
+**Step 3 — Apply the two-term expansion at $\\Delta y = ${rate(shift, 4)}$.**
+$$\\frac{\\Delta P}{P} \\approx -D_{\\text{mod}} \\Delta y + \\tfrac{1}{2} C_{\\text{mod}} (\\Delta y)^2 = ${rate(firstOrderTerm, 6)} + ${rate(secondOrderTerm, 6)}$$
+$$P_{\\text{new}} \\approx ${mathNum(price)} \\times \\left(1 ${rate(firstOrderTerm + secondOrderTerm, 6)}\\right) = ${mathMoney(correctValue)}$$
+
+Repricing exactly at ${pct(yieldRate + shift)} gives ${money(exactPrice)}; the convexity term closes most of the gap the duration-only estimate of ${money(firstOrderOnly)} leaves open.`,
+        checks: [
+          {
+            label: "second-order estimate beats the first-order estimate",
+            ok: Math.abs(correctValue - exactPrice) < Math.abs(firstOrderOnly - exactPrice),
+          },
+          {
+            label: "convexity term is positive",
+            ok: secondOrderTerm > 0,
+          },
+        ],
+      };
+    },
+  },
+
+  {
+    id: "SWAP_AMORTIZING_NOTIONAL",
+    domain: "ALM_IMMUNIZATION",
+    title: "Swap Rate on an Amortizing Notional",
+    objective:
+      "Build a declining notional schedule from a loan repayment plan and weight the swap's par condition by it.",
+    difficulty: 4,
+    topics: ["SWAPS", "LOAN_MECHANICS"],
+    steps: 4,
+    generate: (rng) => {
+      const principal = rng.int(2, 8) * 100000;
+      const n = 4;
+      const base = rng.float(0.026, 0.042, 4);
+      const slope = rng.float(0.003, 0.008, 4);
+      const spots = Array.from({ length: n }, (_, index) =>
+        Number((base + slope * index).toFixed(6))
+      );
+      const factors = ActuarialMath.spotDiscountFactors(spots);
+
+      const repayment = principal / n;
+      // Notional in force during year t is the balance outstanding at its start.
+      const notionals = Array.from({ length: n }, (_, index) => principal - index * repayment);
+
+      let numerator = 0;
+      let denominator = 0;
+      for (let t = 1; t <= n; t += 1) {
+        const previousFactor = t === 1 ? 1 : factors[t - 2];
+        numerator += notionals[t - 1] * (previousFactor - factors[t - 1]);
+        denominator += notionals[t - 1] * factors[t - 1];
+      }
+      const correctValue = numerator / denominator;
+
+      const levelNotionalRate = ActuarialMath.swapRate(factors);
+
+      let endOfYearNumerator = 0;
+      let endOfYearDenominator = 0;
+      for (let t = 1; t <= n; t += 1) {
+        const balanceAfter = principal - t * repayment;
+        const previousFactor = t === 1 ? 1 : factors[t - 2];
+        endOfYearNumerator += balanceAfter * (previousFactor - factors[t - 1]);
+        endOfYearDenominator += balanceAfter * factors[t - 1];
+      }
+      const endOfYearNotional =
+        endOfYearDenominator === 0 ? levelNotionalRate : endOfYearNumerator / endOfYearDenominator;
+
+      let undiscountedNumerator = 0;
+      let undiscountedDenominator = 0;
+      for (let t = 1; t <= n; t += 1) {
+        undiscountedNumerator += notionals[t - 1] * ActuarialMath.forwardRate(spots, t - 1, t);
+        undiscountedDenominator += notionals[t - 1];
+      }
+      const notionalWeightedAverage = undiscountedNumerator / undiscountedDenominator;
+
+      const longestSpot = spots[n - 1];
+
+      // A level notional must reproduce the ordinary par swap rate.
+      let levelCheckNumerator = 0;
+      let levelCheckDenominator = 0;
+      for (let t = 1; t <= n; t += 1) {
+        const previousFactor = t === 1 ? 1 : factors[t - 2];
+        levelCheckNumerator += previousFactor - factors[t - 1];
+        levelCheckDenominator += factors[t - 1];
+      }
+      const levelCheck = levelCheckNumerator / levelCheckDenominator;
+
+      return {
+        questionText: `A company borrows ${moneyInt(principal)} and repays the principal in ${n} equal instalments of ${moneyInt(repayment)} at the end of each year, paying floating interest annually on the balance outstanding at the start of each year.
+To fix its interest cost the company enters an interest rate swap whose notional in each year equals that outstanding balance.
+The annual effective spot rates are ${spots
+          .map((spot, index) => `$s_{${index + 1}} = ${mathPct(spot)}$`)
+          .join(", ")}.
+Calculate the swap rate.`,
+        variables: { principal, n, spots, notionals },
+        correctValue: correctValue * 100,
+        distractors: [
+          distractor(
+            levelNotionalRate * 100,
+            "CALCULATION_DISTRACTOR",
+            `Priced a level-notional swap, $\\frac{1 - P(0,${n})}{\\sum P(0,t)}$. An amortizing swap weights each year by the notional in force, which shifts weight onto the early years.`
+          ),
+          distractor(
+            endOfYearNotional * 100,
+            "OFF_BY_ONE_PERIOD",
+            "Used the balance outstanding at the *end* of each year. Interest for year $t$ accrues on the balance carried into the year, not the one left after the repayment."
+          ),
+          distractor(
+            notionalWeightedAverage * 100,
+            "SIMPLE_INTEREST_ERROR",
+            "Took a notional-weighted average of the forward rates without discounting. The par condition weights by $Q_t P(0,t)$, so later years count for less."
+          ),
+          distractor(
+            longestSpot * 100,
+            "NOMINAL_RATE_ERROR",
+            `Used the ${n}-year spot rate ${pct(longestSpot)} as the swap rate.`
+          ),
+        ],
+        format: "PERCENT",
+        solutionSteps: `**Step 1 — Discount factors from the spot curve.**
+${spots
+  .map(
+    (spot, index) =>
+      `$$P(0,${index + 1}) = (1 + ${spot})^{-${index + 1}} = ${rate(factors[index], 4)}$$`
+  )
+  .join("\n")}
+
+**Step 2 — Notional in force each year.**
+The swap covers the balance carried into each year:
+$$Q_1 = ${mathInt(notionals[0])},\\quad Q_2 = ${mathInt(notionals[1])},\\quad Q_3 = ${mathInt(notionals[2])},\\quad Q_4 = ${mathInt(notionals[3])}$$
+
+**Step 3 — Value each leg.**
+The floating payment in year $t$ has present value $Q_t\\left[P(0,t-1) - P(0,t)\\right]$, so with $P(0,0) = 1$:
+$$\\sum_t Q_t\\left[P(0,t-1) - P(0,t)\\right] = ${mathNum(numerator, 4)}$$
+$$\\sum_t Q_t P(0,t) = ${mathNum(denominator, 4)}$$
+
+**Step 4 — Set the legs equal.**
+$$R = \\frac{${mathNum(numerator, 4)}}{${mathNum(denominator, 4)}} = ${(correctValue * 100).toFixed(2)}\\%$$
+
+With a level notional the same formula collapses to the ordinary par swap rate of ${mathPct(levelNotionalRate)}; the amortizing schedule pulls the rate towards the earlier, lower forward rates.`,
+        checks: [
+          {
+            label: "formula reduces to the ordinary par swap rate at a level notional",
+            ok: Math.abs(levelCheck - levelNotionalRate) < 1e-12,
+          },
+          {
+            label: "amortizing rate sits below the level-notional rate on a rising curve",
+            ok: correctValue < levelNotionalRate,
+          },
+        ],
+      };
+    },
+  },
 ];
