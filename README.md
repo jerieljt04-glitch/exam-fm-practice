@@ -35,16 +35,29 @@ That produces **Exam FM Practice.app** in `~/Applications` — double-click it, 
 Dock. It appears in Spotlight and Launchpad like any other app.
 
 The app owns no logic of its own. It starts the same production server `npm start` runs, waits
-for it to answer, and opens the exam in your browser; quitting the app stops the server. On the
-first launch it installs dependencies and builds if needed (about a minute, with a notification),
-and it rebuilds automatically whenever the source files are newer than the last build. Anything
-that goes wrong is reported in a dialog, with detail in `~/Library/Logs/exam-fm-practice.log`.
+for it to answer, opens the exam in your browser, and then **exits**. That exit is deliberate:
+macOS does not re-run a running app's executable when its Dock icon is clicked, and this app has
+no window to activate — so if it stayed resident, the second click and every click after it would
+do nothing at all. Exiting means every click reopens the exam.
 
-It serves on port **4173** rather than 3000, so it never collides with a `npm run dev` session.
-Set `EXAM_FM_PORT` before `npm run app:build` to change that.
+The server therefore keeps running in the background after the app quits. Clicking again is
+instant, because the launcher finds it already up and just reopens the page. To shut it down:
+
+```bash
+npm run app:stop
+```
+
+On the first launch the app installs dependencies and builds if needed (about a minute, with a
+notification), and it rebuilds automatically whenever the source files are newer than the last
+build. Anything that goes wrong is reported in a dialog, with detail in
+`~/Library/Logs/exam-fm-practice.log`.
+
+It serves on port **4173** rather than 3000, so it never collides with a `npm run dev` session,
+and it checks that whatever answers on that port is actually this application before reusing it.
+Set `EXAM_FM_PORT` before `npm run app:build` to change the port.
 
 The repository path is baked into the app at build time, so re-run `npm run app:build` if you
-move the project.
+move the project. To build an app pointing at a different checkout, set `EXAM_FM_REPO`.
 
 ## Running it from a terminal instead
 
@@ -189,6 +202,7 @@ prisma/
 
 scripts/
   build-desktop-app.sh          builds Exam FM Practice.app
+  stop-desktop-app.sh           stops the background server
   make-icon.py                  dependency-free icon generator
   test-markup.ts                tokenizer regression tests
   test-engine.ts                blueprint, option, determinism and grading tests

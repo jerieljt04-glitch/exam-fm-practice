@@ -7,14 +7,19 @@
 #
 #   bash scripts/build-desktop-app.sh            # build and install to ~/Applications
 #   bash scripts/build-desktop-app.sh --no-install
+#   EXAM_FM_PORT=4174 bash scripts/build-desktop-app.sh
+#   EXAM_FM_REPO=/path/to/checkout bash scripts/build-desktop-app.sh
 #
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The project the app will drive. Defaults to this checkout; override with
+# EXAM_FM_REPO to build an app that points at a different working tree.
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="${EXAM_FM_REPO:-$SCRIPT_ROOT}"
 APP_NAME="Exam FM Practice"
 BUNDLE_ID="com.examfm.practice"
 PORT="${EXAM_FM_PORT:-4173}"
-STAGING="$REPO_ROOT/dist/$APP_NAME.app"
+STAGING="$SCRIPT_ROOT/dist/$APP_NAME.app"
 INSTALL_DIR="$HOME/Applications"
 INSTALL=1
 [ "${1:-}" = "--no-install" ] && INSTALL=0
@@ -50,7 +55,7 @@ PLIST
 echo "  generating icon..."
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"
-python3 "$REPO_ROOT/scripts/make-icon.py" "$ICONSET/icon_1024.png"
+python3 "$SCRIPT_ROOT/scripts/make-icon.py" "$ICONSET/icon_1024.png"
 for spec in "16 16x16" "32 16x16@2x" "32 32x32" "64 32x32@2x" "128 128x128" \
             "256 128x128@2x" "256 256x256" "512 256x256@2x" "512 512x512" "1024 512x512@2x"; do
   set -- $spec
@@ -73,24 +78,39 @@ LAUNCHER
 cat >> "$STAGING/Contents/MacOS/exam-fm-practice" <<'LAUNCHER'
 URL="http://127.0.0.1:$PORT"
 LOG="$HOME/Library/Logs/exam-fm-practice.log"
-mkdir -p "$(dirname "$LOG")"
+STATE="$HOME/Library/Application Support/Exam FM Practice"
+PIDFILE="$STATE/server.pid"
+mkdir -p "$(dirname "$LOG")" "$STATE"
 
 # A GUI launch inherits almost no PATH, so borrow the login shell's.
 export PATH="$(/bin/zsh -lc 'printf %s "$PATH"' 2>/dev/null):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 say()  { /usr/bin/osascript -e "display notification \"$1\" with title \"Exam FM Practice\"" >/dev/null 2>&1; }
 die()  { /usr/bin/osascript -e "display dialog \"$1\" with title \"Exam FM Practice\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1; exit 1; }
-alive() { /usr/bin/curl -sf -o /dev/null --max-time 2 "$URL"; }
+
+# Confirm the port is answering *and* that it is this application, so a
+# different local server on the same port can never be mistaken for ours.
+alive() { /usr/bin/curl -sf --max-time 3 "$URL" 2>/dev/null | /usr/bin/grep -q "Exam FM Practice"; }
+port_taken() { /usr/bin/nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; }
 
 { echo; echo "=== $(date) launch ==="; } >> "$LOG"
 
-[ -d "$REPO" ] || die "The project folder could not be found at:\n\n$REPO\n\nRebuild the app with scripts/build-desktop-app.sh after moving it."
+[ -d "$REPO" ] || die "The project folder could not be found at:\n\n$REPO\n\nRebuild the app with: npm run app:build"
 cd "$REPO" || die "Could not open $REPO"
 
-command -v node >/dev/null 2>&1 || die "Node.js was not found.\n\nInstall it from nodejs.org, then reopen this app."
+# The server outlives this launcher, so a click while it is already up simply
+# reopens the page. This script must exit rather than stay resident: macOS will
+# not re-run a running app's executable when its Dock icon is clicked, and this
+# app has no window to activate.
+if alive; then
+  echo "server already running; reopening $URL" >> "$LOG"
+  open "$URL"
+  exit 0
+fi
 
-# Already serving? Just bring it up.
-if alive; then open "$URL"; exit 0; fi
+port_taken && die "Port $PORT is in use by another program, so the exam server cannot start.\n\nClose it, or rebuild on a different port:\n\nEXAM_FM_PORT=4174 npm run app:build"
+
+command -v node >/dev/null 2>&1 || die "Node.js was not found.\n\nInstall it from nodejs.org, then reopen this app."
 
 if [ ! -d node_modules ]; then
   say "First run — installing dependencies…"
@@ -111,22 +131,25 @@ if [ "$NEEDS_BUILD" = "1" ]; then
   npm run build >> "$LOG" 2>&1 || die "The build failed.\n\nSee $LOG"
 fi
 
-npm start -- --port "$PORT" >> "$LOG" 2>&1 &
+# Detach the server so it survives this launcher exiting.
+nohup npm start -- --port "$PORT" >> "$LOG" 2>&1 &
 SERVER_PID=$!
-trap 'kill $SERVER_PID 2>/dev/null; wait $SERVER_PID 2>/dev/null' EXIT INT TERM
+disown "$SERVER_PID" 2>/dev/null || true
+echo "$SERVER_PID" > "$PIDFILE"
 
 for _ in $(seq 1 90); do
   alive && break
-  kill -0 $SERVER_PID 2>/dev/null || die "The server stopped unexpectedly.\n\nSee $LOG"
+  kill -0 "$SERVER_PID" 2>/dev/null || die "The server stopped unexpectedly.\n\nSee $LOG"
   sleep 1
 done
 
-alive || die "The server did not start within 90 seconds.\n\nSee $LOG"
+if ! alive; then
+  kill "$SERVER_PID" 2>/dev/null
+  die "The server did not start within 90 seconds.\n\nSee $LOG"
+fi
 
+echo "server ready on $PORT (pid $SERVER_PID)" >> "$LOG"
 open "$URL"
-
-# Stay resident: quitting the app from the Dock stops the server.
-wait $SERVER_PID
 LAUNCHER
 
 chmod +x "$STAGING/Contents/MacOS/exam-fm-practice"

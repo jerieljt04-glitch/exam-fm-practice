@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "app:build": "bash scripts/build-desktop-app.sh",
+    "app:stop": "bash scripts/stop-desktop-app.sh",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:markup && npm run test:engine",
