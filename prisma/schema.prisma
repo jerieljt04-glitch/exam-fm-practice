@@ -32,8 +32,9 @@ model ExamSession {
   pausedTimeMs     Int            @default(0)
   isPaused         Boolean        @default(false)
   lastPausedAt     DateTime?
+  lastSeenAt       DateTime?
   durationSeconds  Int            @default(9000) // 150 minutes
-  status           String         // "IN_PROGRESS", "PAUSED", "COMPLETED"
+  status           String         // "IN_PROGRESS", "PAUSED", "COMPLETED", "ABANDONED"
   questions        ExamQuestion[]
 }
 

@@ -12,6 +12,7 @@
 import katex from "katex";
 
 import {
+  ABANDON_AFTER_MS,
   DEFAULT_DIFFICULTIES,
   DOMAIN_ORDER,
   EXAM_TOTAL_QUESTIONS,
@@ -316,6 +317,73 @@ async function run(): Promise<void> {
   check(
     revisited?.endTime === endTime,
     "Revisiting the review must not re-close the exam or move the end time"
+  );
+
+  section("5. A sitting ends when its tab closes");
+
+  // Still being watched: a heartbeat inside the window keeps the sitting open.
+  // This is the reload case — the page is back and reporting within a second.
+  const live = await examRepository.createExamSession("closes-test");
+  live.lastSeenAt = new Date(Date.now() - Math.floor(ABANDON_AFTER_MS / 2)).toISOString();
+  await examRepository.recordHeartbeat(live.id);
+  const afterBeat = await examRepository.getExamSession(live.id);
+  check(
+    afterBeat?.status === "IN_PROGRESS",
+    `A sitting that reports in before the deadline must stay open (got ${afterBeat?.status})`
+  );
+  check(
+    afterBeat !== null &&
+      Date.now() - new Date(afterBeat.lastSeenAt).getTime() < ABANDON_AFTER_MS / 2,
+    "A heartbeat must refresh the last-seen time"
+  );
+
+  // Past the deadline the sitting is over, and a late heartbeat does not revive
+  // it: reopening a tab you closed half a minute ago starts a new exam.
+  const late = await examRepository.createExamSession("closes-test-late");
+  late.lastSeenAt = new Date(Date.now() - ABANDON_AFTER_MS - 5000).toISOString();
+  await examRepository.recordHeartbeat(late.id);
+  const afterLate = await examRepository.getExamSession(late.id);
+  check(
+    afterLate?.status === "ABANDONED",
+    `A heartbeat arriving after the deadline must not revive a sitting (got ${afterLate?.status})`
+  );
+
+  // Tab closed: the heartbeat stops and the sitting is retired.
+  const closed = await examRepository.createExamSession("closes-test-2");
+  closed.lastSeenAt = new Date(Date.now() - ABANDON_AFTER_MS - 5000).toISOString();
+  const afterClose = await examRepository.getExamSession(closed.id);
+  check(
+    afterClose?.status === "ABANDONED",
+    `A sitting that stops reporting must be abandoned (got ${afterClose?.status})`
+  );
+  check(
+    (await examRepository.getReviewData(closed.id)) === null,
+    "An abandoned sitting must have no report"
+  );
+
+  // Answers to a dead sitting are refused.
+  const deadQuestion = closed.questions[0];
+  await examRepository.updateQuestionAnswer(closed.id, deadQuestion.id, "A");
+  const reread = await examRepository.getExamSession(closed.id);
+  check(
+    reread?.questions[0].selectedOption === null,
+    "An abandoned sitting must not accept further answers"
+  );
+
+  // Starting a new exam retires whatever the candidate left open.
+  const first = await examRepository.createExamSession("one-at-a-time");
+  const second = await examRepository.createExamSession("one-at-a-time");
+  const firstAgain = await examRepository.getExamSession(first.id);
+  check(
+    firstAgain?.status === "ABANDONED",
+    `Starting a new exam must retire the previous sitting (got ${firstAgain?.status})`
+  );
+  check(second.status === "IN_PROGRESS", "The new sitting must be open");
+  check(
+    first.questions.every(
+      (q, index) => q.renderedQuestion !== second.questions[index].renderedQuestion
+    ),
+    "Two sittings must not pose identically worded questions in the same position"
   );
 
   section("Result");

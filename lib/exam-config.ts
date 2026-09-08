@@ -19,6 +19,16 @@ export const EXAM_DURATION_SECONDS = EXAM_DURATION_MINUTES * 60;
 export const OPTION_KEYS = ["A", "B", "C", "D", "E"] as const;
 export type OptionKey = (typeof OPTION_KEYS)[number];
 
+/**
+ * How long a sitting may go without a sign of life from the browser before it
+ * is treated as abandoned. The exam page sends a heartbeat every 10 seconds, so
+ * a reload survives comfortably while a closed tab does not.
+ */
+export const ABANDON_AFTER_MS = 30_000;
+
+/** How often the exam page reports that it is still open. */
+export const HEARTBEAT_INTERVAL_MS = 10_000;
+
 /** Passing benchmark used by this platform's diagnostics: 70% (21 of 30). */
 export const PASS_RATIO = 0.7;
 export const PASS_MARK = Math.ceil(EXAM_TOTAL_QUESTIONS * PASS_RATIO);

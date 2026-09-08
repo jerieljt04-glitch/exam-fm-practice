@@ -33,7 +33,12 @@ import { Progress } from "./ui/progress";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { useExamTimer } from "@/hooks/useExamTimer";
-import { DIFFICULTY_LABELS, DOMAIN_LABELS, OPTION_KEYS } from "@/lib/exam-config";
+import {
+  DIFFICULTY_LABELS,
+  DOMAIN_LABELS,
+  HEARTBEAT_INTERVAL_MS,
+  OPTION_KEYS,
+} from "@/lib/exam-config";
 import type { ExamSessionData } from "@/lib/types/exam";
 import { cn } from "@/lib/utils";
 
@@ -172,6 +177,26 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
       updateQuestion(index, { isFlagged: !nextFlag });
     }
   }, [currentIndex, interactionLocked, patchSession, session.questions, updateQuestion]);
+
+  // Report that this tab is still open. The server ends a sitting that stops
+  // reporting, so closing the tab ends the exam while a reload — which resumes
+  // the heartbeat within a second — does not.
+  useEffect(() => {
+    if (isSubmitting) return;
+
+    const beat = () => {
+      void fetch(`/api/exams/${session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "HEARTBEAT" }),
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+
+    beat();
+    const interval = window.setInterval(beat, HEARTBEAT_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [isSubmitting, session.id]);
 
   const goToNext = useCallback(() => {
     setCurrentIndex((index) => Math.min(index + 1, totalQuestions - 1));

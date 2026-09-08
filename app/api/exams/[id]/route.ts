@@ -10,6 +10,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     if (!session) {
       return NextResponse.json({ success: false, error: "Exam session not found" }, { status: 404 });
     }
+    if (session.status === "ABANDONED") {
+      return NextResponse.json(
+        { success: false, error: "This exam was closed and has ended" },
+        { status: 410 }
+      );
+    }
     return NextResponse.json({ success: true, session });
   } catch (error) {
     console.error("Error fetching exam session:", error);
@@ -23,7 +29,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 type PatchBody =
   | { action: "TOGGLE_PAUSE"; isPaused: boolean }
   | { action: "SELECT_OPTION"; questionId: string; selectedOption: string | null }
-  | { action: "TOGGLE_FLAG"; questionId: string; isFlagged: boolean };
+  | { action: "TOGGLE_FLAG"; questionId: string; isFlagged: boolean }
+  | { action: "HEARTBEAT" }
+  | { action: "ABANDON" };
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -76,6 +84,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           undefined,
           body.isFlagged
         );
+        return NextResponse.json({ success: true });
+      }
+
+      case "HEARTBEAT": {
+        const session = await examRepository.recordHeartbeat(params.id);
+        if (!session) {
+          return NextResponse.json(
+            { success: false, error: "Exam session not found" },
+            { status: 404 }
+          );
+        }
+        return NextResponse.json({ success: true, status: session.status });
+      }
+
+      case "ABANDON": {
+        await examRepository.abandonExam(params.id);
         return NextResponse.json({ success: true });
       }
 

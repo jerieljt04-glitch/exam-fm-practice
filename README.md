@@ -324,6 +324,26 @@ from the database cannot inject markup into the exam interface.
 
 ---
 
+## A sitting ends when you close it
+
+An exam is a single sitting. There is no resuming one, and no way to land back
+on a paper you have walked away from:
+
+- The exam page reports in every 10 seconds. If it stops for 30 seconds the
+  sitting is marked `ABANDONED` — closing the tab ends the exam.
+- A reload is not a close. The page resumes reporting within a second or two, so
+  it never crosses the deadline. A heartbeat arriving *after* the deadline does
+  not revive a dead sitting.
+- Reopening an ended exam redirects to the landing page with a note saying so;
+  the API answers `410 Gone`. It is never graded and has no report.
+- Starting a new exam retires anything the candidate left open, so the back
+  button cannot resurrect a stale paper either.
+- The application icon always opens the landing page, never an exam.
+
+Every sitting therefore draws a fresh set of 30 questions. Two sittings share
+question *types* — 30 drawn from 47 templates — but never the same numbers,
+names, answer or distractors.
+
 ## Timing and pause/resume
 
 Remaining time is recomputed from wall-clock timestamps on every tick rather than by
@@ -336,6 +356,9 @@ cannot hand the candidate extra time or take any away.
 - A pause still open at submission is closed out before grading, so it is never counted as
   active exam time.
 - Revisiting a completed report never re-grades or moves the end time.
+- Closing the tab does **not** pause the clock: time is measured against the
+  wall clock, so pause before you leave if you intend to come back within the
+  30-second window.
 
 ---
 

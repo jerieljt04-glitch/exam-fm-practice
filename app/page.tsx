@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -41,6 +41,17 @@ export default function HomePage() {
   const router = useRouter();
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wasClosed, setWasClosed] = useState(false);
+
+  // Set when the exam page redirects here because its sitting had ended.
+  // Read from the URL directly rather than through useSearchParams, which would
+  // force this page out of static rendering.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("closed")) {
+      setWasClosed(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   const startExam = async () => {
     setIsStarting(true);
@@ -114,6 +125,14 @@ export default function HomePage() {
             fresh numbers on every attempt, wrong answers built from the mistakes candidates actually
             make, a pause/resume clock, and a full worked solution for every question.
           </p>
+
+          {wasClosed && (
+            <p className="mx-auto flex max-w-md items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 text-warning" />
+              That exam ended when you closed it. Start a new one below — the questions will be
+              different.
+            </p>
+          )}
 
           <div className="flex flex-col items-center justify-center gap-3 pt-2">
             <Button size="lg" onClick={startExam} disabled={isStarting} className="w-full sm:w-auto">

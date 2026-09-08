@@ -48,7 +48,7 @@ export interface ExamQuestionData {
   solutionSteps: string;
 }
 
-export type ExamStatus = "IN_PROGRESS" | "PAUSED" | "COMPLETED";
+export type ExamStatus = "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "ABANDONED";
 
 export interface ExamSessionData {
   id: string;
@@ -58,6 +58,8 @@ export interface ExamSessionData {
   pausedTimeMs: number;
   isPaused: boolean;
   lastPausedAt: string | null;
+  /** Last time the exam page reported being open; drives abandonment. */
+  lastSeenAt: string;
   /** 9000 seconds = 150 minutes. */
   durationSeconds: number;
   status: ExamStatus;

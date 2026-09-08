@@ -1,4 +1,5 @@
 import {
+  ABANDON_AFTER_MS,
   DOMAIN_LABELS,
   DOMAIN_ORDER,
   type DifficultyLevel,
@@ -82,6 +83,17 @@ async function tryPrisma<T>(fn: () => Promise<T>, fallback: () => T | Promise<T>
     }
     return fallback();
   }
+}
+
+/**
+ * A sitting is abandoned once the browser stops reporting in. Closing the tab
+ * ends the exam; a reload does not, because the page resumes its heartbeat
+ * within a second or two.
+ */
+function isAbandoned(session: ExamSessionData, now: number = Date.now()): boolean {
+  if (session.status === "COMPLETED" || session.status === "ABANDONED") return false;
+  const lastSeen = new Date(session.lastSeenAt ?? session.startTime).getTime();
+  return now - lastSeen > ABANDON_AFTER_MS;
 }
 
 function seedOf(variables: unknown): string | null {
@@ -182,10 +194,23 @@ export const examRepository = {
       pausedTimeMs: 0,
       isPaused: false,
       lastPausedAt: null,
+      lastSeenAt: new Date().toISOString(),
       durationSeconds: EXAM_DURATION_SECONDS,
       status: "IN_PROGRESS",
       questions,
     };
+
+    // Starting a new exam retires any sitting this candidate left open, so an
+    // old tab or a back button can never resume a stale paper.
+    localStore.forEach((existing, id) => {
+      if (
+        existing.userId === userId &&
+        (existing.status === "IN_PROGRESS" || existing.status === "PAUSED")
+      ) {
+        existing.status = "ABANDONED";
+        localStore.set(id, existing);
+      }
+    });
 
     localStore.set(sessionId, session);
 
@@ -199,6 +224,7 @@ export const examRepository = {
             startTime: new Date(session.startTime),
             pausedTimeMs: 0,
             isPaused: false,
+            lastSeenAt: new Date(session.lastSeenAt),
             durationSeconds: EXAM_DURATION_SECONDS,
             status: "IN_PROGRESS",
             questions: {
@@ -270,15 +296,84 @@ export const examRepository = {
           pausedTimeMs: row.pausedTimeMs,
           isPaused: row.isPaused,
           lastPausedAt: row.lastPausedAt ? row.lastPausedAt.toISOString() : null,
+          lastSeenAt: (row.lastSeenAt ?? row.startTime).toISOString(),
           durationSeconds: row.durationSeconds,
           status: row.status as ExamSessionData["status"],
           questions,
         };
 
         localStore.set(sessionId, session);
-        return session;
+        return this.expireIfAbandoned(session);
       },
-      () => localStore.get(sessionId) ?? null
+      () => {
+        const cached = localStore.get(sessionId);
+        return cached ? this.expireIfAbandoned(cached) : null;
+      }
+    );
+  },
+
+  /** Marks a stale sitting abandoned and persists that, then returns it. */
+  expireIfAbandoned(session: ExamSessionData): ExamSessionData {
+    if (!isAbandoned(session)) return session;
+
+    session.status = "ABANDONED";
+    session.isPaused = false;
+    localStore.set(session.id, session);
+
+    void tryPrisma(
+      async () => {
+        await prisma.examSession.update({
+          where: { id: session.id },
+          data: { status: "ABANDONED", isPaused: false },
+        });
+      },
+      () => undefined
+    );
+
+    return session;
+  },
+
+  /** Records that the exam page is still open. */
+  async recordHeartbeat(sessionId: string): Promise<ExamSessionData | null> {
+    const session = await this.getExamSession(sessionId);
+    if (!session) return null;
+    if (session.status !== "IN_PROGRESS" && session.status !== "PAUSED") return session;
+
+    const now = new Date();
+    session.lastSeenAt = now.toISOString();
+    localStore.set(sessionId, session);
+
+    await tryPrisma(
+      async () => {
+        await prisma.examSession.update({
+          where: { id: sessionId },
+          data: { lastSeenAt: now },
+        });
+      },
+      () => undefined
+    );
+
+    return session;
+  },
+
+  /** Ends a sitting immediately, without grading it. */
+  async abandonExam(sessionId: string): Promise<void> {
+    const session = localStore.get(sessionId) ?? (await this.getExamSession(sessionId));
+    if (!session) return;
+    if (session.status === "COMPLETED") return;
+
+    session.status = "ABANDONED";
+    session.isPaused = false;
+    localStore.set(sessionId, session);
+
+    await tryPrisma(
+      async () => {
+        await prisma.examSession.update({
+          where: { id: sessionId },
+          data: { status: "ABANDONED", isPaused: false },
+        });
+      },
+      () => undefined
     );
   },
 
@@ -293,7 +388,7 @@ export const examRepository = {
   async updatePauseState(sessionId: string, isPaused: boolean): Promise<ExamSessionData> {
     const session = await this.getExamSession(sessionId);
     if (!session) throw new Error(`Exam session ${sessionId} not found`);
-    if (session.status === "COMPLETED") return session;
+    if (session.status === "COMPLETED" || session.status === "ABANDONED") return session;
 
     const now = new Date();
     let pausedTimeMs = session.pausedTimeMs;
@@ -337,7 +432,7 @@ export const examRepository = {
     isFlagged?: boolean
   ): Promise<void> {
     const session = localStore.get(sessionId) ?? (await this.getExamSession(sessionId));
-    if (session?.status === "COMPLETED") return;
+    if (session?.status === "COMPLETED" || session?.status === "ABANDONED") return;
 
     const question = session?.questions.find((item) => item.id === questionId);
     if (question) {
@@ -491,6 +586,8 @@ export const examRepository = {
   async getReviewData(sessionId: string): Promise<ExamReviewData | null> {
     const session = await this.getExamSession(sessionId);
     if (!session) return null;
+    // An abandoned sitting is never graded; there is no report for it.
+    if (session.status === "ABANDONED") return null;
     if (session.status !== "COMPLETED" || !session.endTime) {
       return this.submitExam(sessionId);
     }
