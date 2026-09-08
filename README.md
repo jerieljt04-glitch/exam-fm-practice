@@ -61,6 +61,16 @@ Set `EXAM_FM_PORT` before `npm run app:build` to change the port.
 The repository path is baked into the app at build time, so re-run `npm run app:build` if you
 move the project. To build an app pointing at a different checkout, set `EXAM_FM_REPO`.
 
+### Driving the app from a terminal
+
+```bash
+open -a "Exam FM Practice"     # same as clicking the icon: starts it if needed, opens the exam
+npm run app:stop               # stop the background server
+npm run app:build              # rebuild the bundle (after moving the project, or changing the port)
+```
+
+`open -a` works from any directory; the `npm` scripts must be run from the project folder.
+
 ## Running it from a terminal instead
 
 ```bash
