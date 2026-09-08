@@ -1,5 +1,6 @@
 import { ActuarialMath } from "../financial-math";
 import { mathInt, mathMoney, moneyInt, pct, rate } from "../format";
+import { cast, effectiveRate } from "../style";
 import { distractor, type QuestionTemplateDefinition } from "./types";
 
 /**
@@ -16,6 +17,7 @@ export const ANNUITY_TEMPLATES: QuestionTemplateDefinition[] = [
     topics: ["TIME_VALUE"],
     steps: 1,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const payment = rng.int(10, 40) * 100;
       const n = rng.int(8, 20);
       const i = rng.float(0.04, 0.08, 3);
@@ -30,8 +32,9 @@ export const ANNUITY_TEMPLATES: QuestionTemplateDefinition[] = [
       const undiscounted = payment * n;
 
       return {
-        questionText: `An annuity pays ${moneyInt(payment)} at the end of each year for ${n} years. The annual effective interest rate is ${pct(i)}.
-Calculate the present value of the annuity.`,
+        questionText: `${buyer} will receive ${moneyInt(payment)} at the end of each year for ${n} years.
+The annual effective interest rate is ${pct(i)}.
+Calculate the present value of ${buyer}'s payments.`,
         variables: { payment, n, i },
         correctValue,
         distractors: [
@@ -80,6 +83,7 @@ $$PV = ${mathMoney(payment, 0)} \\times ${annuityFactor.toFixed(4)} = ${mathMone
     topics: ["TIME_VALUE"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const n = rng.int(10, 20);
       const i = rng.float(0.04, 0.07, 3);
       const base = rng.int(1, 5) * 100;
@@ -95,9 +99,10 @@ $$PV = ${mathMoney(payment, 0)} \\times ${annuityFactor.toFixed(4)} = ${mathMone
       const averagePayment = ((base * (n + 1)) / 2) * immediateFactor;
 
       return {
-        questionText: `An annuity-immediate makes ${n} annual payments. The payment at the end of year $t$ is $${base}t$ — that is, ${moneyInt(base)} at $t = 1$, ${moneyInt(2 * base)} at $t = 2$, increasing by ${moneyInt(base)} each year up to ${moneyInt(n * base)} at $t = ${n}$.
+        questionText: `${buyer} will receive payments at the end of each year for ${n} years.
+The first payment is ${moneyInt(base)}, and each payment thereafter is ${moneyInt(base)} larger than the one before, so that the payment at the end of year $t$ is $${base}t$.
 The annual effective interest rate is ${pct(i)}.
-Calculate the present value of the annuity.`,
+Calculate the present value of ${buyer}'s payments.`,
         variables: { base, n, i },
         correctValue,
         distractors: [
@@ -146,6 +151,7 @@ $$PV = ${mathInt(base)} \\times ${increasingFactor.toFixed(4)} = ${mathMoney(cor
     topics: ["TIME_VALUE"],
     steps: 1,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const firstPayment = rng.int(1, 5) * 1000;
       const g = rng.float(0.02, 0.035, 3);
       const i = Number((g + rng.float(0.02, 0.04, 3)).toFixed(4));
@@ -158,9 +164,10 @@ $$PV = ${mathInt(base)} \\times ${increasingFactor.toFixed(4)} = ${mathMoney(cor
       const dividedByGrowth = firstPayment / g;
 
       return {
-        questionText: `A perpetuity pays ${moneyInt(firstPayment)} at the end of the first year. Every subsequent annual payment is ${pct(g)} larger than the previous payment.
+        questionText: `${buyer} purchases a perpetuity that pays ${moneyInt(firstPayment)} at the end of the first year.
+Each subsequent annual payment is ${pct(g)} larger than the payment before it.
 The annual effective interest rate is ${pct(i)}.
-Calculate the present value of the perpetuity.`,
+Calculate the price ${buyer} pays for the perpetuity.`,
         variables: { firstPayment, g, i },
         correctValue,
         distractors: [
@@ -207,6 +214,7 @@ $$PV = \\frac{${mathInt(firstPayment)}}{${i} - ${g}} = \\frac{${mathInt(firstPay
     topics: ["TIME_VALUE"],
     steps: 1,
     generate: (rng) => {
+      const [saver] = cast(rng);
       const deposit = rng.int(15, 60) * 100;
       const n = rng.int(10, 25);
       const i = rng.float(0.03, 0.07, 3);
@@ -221,8 +229,9 @@ $$PV = \\frac{${mathInt(firstPayment)}}{${i} - ${g}} = \\frac{${mathInt(firstPay
       const offByOne = deposit * ActuarialMath.accumulatedAnnuityDue(n - 1, i);
 
       return {
-        questionText: `A saver deposits ${moneyInt(deposit)} at the **beginning** of each year for ${n} years into an account earning an annual effective interest rate of ${pct(i)}.
-Calculate the accumulated value of the account at the end of year ${n}.`,
+        questionText: `${saver} deposits ${moneyInt(deposit)} into an account at the beginning of each year for ${n} years.
+The account credits ${effectiveRate(i)}.
+Calculate the accumulated value of ${saver}'s account at the end of year ${n}.`,
         variables: { deposit, n, i },
         correctValue,
         distractors: [
@@ -271,6 +280,7 @@ $$AV = ${mathMoney(deposit, 0)} \\times ${dueFactor.toFixed(4)} = ${mathMoney(co
     topics: ["TIME_VALUE"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const payment = rng.int(20, 60) * 100;
       const n = rng.int(8, 15);
       const deferral = rng.int(3, 7);
@@ -286,9 +296,10 @@ $$AV = ${mathMoney(deposit, 0)} \\times ${dueFactor.toFixed(4)} = ${mathMoney(co
       const missingSubtraction = payment * ActuarialMath.annuityImmediate(n + deferral, i);
 
       return {
-        questionText: `An annuity pays ${moneyInt(payment)} at the end of each year for ${n} years. The first payment is made at the end of year ${deferral + 1}.
+        questionText: `${buyer} will receive ${moneyInt(payment)} at the end of each year for ${n} years.
+The first payment is made at the end of year ${deferral + 1}.
 The annual effective interest rate is ${pct(i)}.
-Calculate the present value of the annuity at time $t = 0$.`,
+Calculate the present value of ${buyer}'s payments at time $t = 0$.`,
         variables: { payment, n, deferral, i },
         correctValue,
         distractors: [
@@ -337,6 +348,7 @@ $$PV = ${mathMoney(payment, 0)} \\times ${rate(Math.pow(v, deferral))} \\times $
     topics: ["TIME_VALUE"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const annualRate = rng.int(20, 80) * 100;
       const n = rng.int(6, 18);
       const i = rng.float(0.04, 0.09, 3);
@@ -351,8 +363,9 @@ $$PV = ${mathMoney(payment, 0)} \\times ${rate(Math.pow(v, deferral))} \\times $
       const offByOne = annualRate * ActuarialMath.continuousAnnuity(n - 1, i);
 
       return {
-        questionText: `An annuity pays continuously at an annual rate of ${moneyInt(annualRate)} per year for ${n} years. The annual effective interest rate is ${pct(i)}.
-Calculate the present value of the annuity.`,
+        questionText: `${buyer} receives payments continuously for ${n} years at a rate of ${moneyInt(annualRate)} per year.
+The annual effective interest rate is ${pct(i)}.
+Calculate the present value of ${buyer}'s payments.`,
         variables: { annualRate, n, i, delta },
         correctValue,
         distractors: [

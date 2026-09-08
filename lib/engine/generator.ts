@@ -9,7 +9,7 @@ import {
   type OptionKey,
 } from "../exam-config";
 import type { ExamQuestionData, RenderedOption } from "../types/exam";
-import { money, num } from "./format";
+import { int, money, num } from "./format";
 import { createRng, type Rng } from "./random";
 import { QUESTION_TEMPLATES, TEMPLATES_BY_DOMAIN, getTemplateById } from "./templates";
 import type { AnswerFormat, QuestionTemplateDefinition } from "./templates/types";
@@ -34,15 +34,15 @@ export interface GenerateExamOptions {
 export const SEED_VARIABLE_KEY = "_seed";
 
 /**
- * Renders a numeric answer into option text.
- * Currency is escaped (`\$`) so the markup tokenizer never reads a price as a
- * math delimiter — see `lib/math/markup.ts`.
+ * Renders a numeric answer into option text, using the precision the SOA
+ * sample questions use: amounts of 1,000 or more are quoted as whole numbers,
+ * smaller amounts to the cent, rates as percentages to two places.
  */
 export function formatAnswer(value: number, format: AnswerFormat): string {
   if (!Number.isFinite(value)) return "Not determinable";
   switch (format) {
     case "CURRENCY":
-      return money(value, 2);
+      return Math.abs(value) >= 1000 ? int(value) : money(value, 2);
     case "PERCENT":
       return `${value.toFixed(2)}%`;
     case "BASIS_POINTS":

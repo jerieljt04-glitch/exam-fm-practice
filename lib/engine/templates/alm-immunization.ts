@@ -1,5 +1,6 @@
 import { ActuarialMath } from "../financial-math";
 import { mathInt, mathMoney, mathNum, moneyInt, num, pct, rate } from "../format";
+import { cast, effectiveRate, institution } from "../style";
 import { distractor, type QuestionTemplateDefinition } from "./types";
 
 /**
@@ -16,6 +17,7 @@ export const ALM_TEMPLATES: QuestionTemplateDefinition[] = [
     topics: ["BONDS_AND_CURVES", "IMMUNIZATION"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = 1000;
       const n = rng.choice([3, 4, 5]);
       const r = rng.float(0.05, 0.08, 3);
@@ -38,9 +40,10 @@ export const ALM_TEMPLATES: QuestionTemplateDefinition[] = [
       const offByOne = correctValue - 1;
 
       return {
-        questionText: `A ${n}-year bond with par value ${moneyInt(par)} pays annual coupons at an annual effective rate of ${pct(r)} and is redeemable at par.
+        questionText: `${buyer} owns a ${n}-year bond with par value ${moneyInt(par)}, redeemable at par.
+The bond pays annual coupons at ${effectiveRate(r)}.
 The annual effective yield rate is ${pct(y)}.
-Calculate the Macaulay duration of the bond, in years.`,
+Calculate the Macaulay duration of ${buyer}'s bond.`,
         variables: { par, n, r, y, price },
         correctValue,
         distractors: [
@@ -90,6 +93,7 @@ $$D_{\\text{mac}} = \\frac{${mathNum(correctValue * price)}}{${mathNum(price)}} 
     topics: ["IMMUNIZATION"],
     steps: 1,
     generate: (rng) => {
+      const fund = institution(rng);
       const price = rng.int(90, 115) * 10;
       const modifiedDuration = rng.float(4.5, 9.5, 2);
       const yieldRate = rng.float(0.03, 0.07, 3);
@@ -108,9 +112,10 @@ $$D_{\\text{mac}} = \\frac{${mathNum(correctValue * price)}}{${mathNum(price)}} 
       const basisPointConfusion = price - modifiedDuration * price * (sign * (basisPoints / 100));
 
       return {
-        questionText: `A bond portfolio has a market value of ${moneyInt(price)}, a modified duration of ${num(modifiedDuration)} years, and an annual effective yield of ${pct(yieldRate)}.
+        questionText: `${fund} holds a bond portfolio with a market value of ${moneyInt(price)}.
+The portfolio has a modified duration of ${num(modifiedDuration)} years and an annual effective yield of ${pct(yieldRate)}.
 The yield ${direction} by ${basisPoints} basis points.
-Using the first-order modified duration approximation, estimate the new market value of the portfolio.`,
+Using the first-order modified duration approximation, calculate the new market value of ${fund}'s portfolio.`,
         variables: { price, modifiedDuration, yieldRate, basisPoints, deltaY, direction },
         correctValue,
         distractors: [
@@ -158,6 +163,7 @@ $$P_{\\text{new}} = ${mathInt(price)} + (${mathNum(priceChange)}) = ${mathMoney(
     topics: ["TIME_VALUE", "IMMUNIZATION"],
     steps: 3,
     generate: (rng) => {
+      const insurer = institution(rng);
       const liabilityTime = rng.choice([6, 8, 10]);
       const liability = rng.int(10, 30) * 10000;
       const y = rng.float(0.05, 0.08, 3);
@@ -175,9 +181,10 @@ $$P_{\\text{new}} = ${mathInt(price)} + (${mathNum(priceChange)}) = ${mathMoney(
       const equalSplit = liability / 2;
 
       return {
-        questionText: `An insurer has a single liability of ${moneyInt(liability)} due at time $t = ${liabilityTime}$. The annual effective interest rate is ${pct(y)}.
-To Redington immunize the liability, the insurer buys zero-coupon bonds maturing at $t = ${t1}$ and $t = ${t2}$.
-Calculate the maturity value of the zero-coupon bond maturing at $t = ${t1}$.`,
+        questionText: `${insurer} must pay ${moneyInt(liability)} at time $t = ${liabilityTime}$.
+The annual effective interest rate is ${pct(y)} at all maturities.
+${insurer} buys zero-coupon bonds maturing at $t = ${t1}$ and $t = ${t2}$ so that the liability is Redington immunized.
+Calculate the maturity value of the bond maturing at $t = ${t1}$.`,
         variables: { liabilityTime, liability, y, t1, t2, asset1Pv, asset2Pv },
         correctValue,
         distractors: [
@@ -229,6 +236,7 @@ $$A_1 = PV(A_1)(1 + ${y})^{${t1}} = ${mathNum(asset1Pv)} \\times ${rate(Math.pow
     topics: ["TIME_VALUE", "IMMUNIZATION"],
     steps: 3,
     generate: (rng) => {
+      const insurer = institution(rng);
       const liability = rng.int(20, 60) * 10000;
       const liabilityTime = rng.int(8, 14);
       const before = rng.int(2, 5);
@@ -244,8 +252,9 @@ $$A_1 = PV(A_1)(1 + ${y})^{${t1}} = ${mathNum(asset1Pv)} \\times ${rate(Math.pow
       const equalSplit = (liability / 2) * Math.pow(v, before);
 
       return {
-        questionText: `An insurer must pay a liability of ${moneyInt(liability)} at time $t = ${liabilityTime}$. The annual effective interest rate is ${pct(y)}.
-The insurer fully immunizes the liability with two zero-coupon bonds maturing at $t = ${liabilityTime - before}$ and $t = ${liabilityTime + after}$.
+        questionText: `${insurer} must pay ${moneyInt(liability)} at time $t = ${liabilityTime}$.
+The annual effective interest rate is ${pct(y)} at all maturities.
+${insurer} fully immunizes the liability with two zero-coupon bonds, one maturing at $t = ${liabilityTime - before}$ and one at $t = ${liabilityTime + after}$.
 Calculate the maturity value of the bond maturing at $t = ${liabilityTime - before}$.`,
         variables: { liability, liabilityTime, before, after, y },
         correctValue,
@@ -296,6 +305,7 @@ $$A = ${mathMoney(correctValue)}$$`,
     topics: ["IMMUNIZATION"],
     steps: 1,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const n = rng.int(5, 20);
       const y = rng.float(0.03, 0.08, 3);
 
@@ -307,8 +317,9 @@ $$A = ${mathMoney(correctValue)}$$`,
       const singleDiscount = (n * (n + 1)) / (1 + y);
 
       return {
-        questionText: `A zero-coupon bond matures in ${n} years. The annual effective yield rate is ${pct(y)}.
-Calculate the modified convexity of the bond.`,
+        questionText: `${buyer} owns a zero-coupon bond maturing at the end of year ${n}.
+The annual effective yield rate is ${pct(y)}.
+Calculate the modified convexity of ${buyer}'s bond.`,
         variables: { n, y },
         correctValue,
         distractors: [
@@ -358,6 +369,7 @@ $$C_{\\text{mod}} = \\frac{${n}(${n + 1})}{(1 + ${y})^{2}} = \\frac{${n * (n + 1
     topics: ["TIME_VALUE", "IMMUNIZATION"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const n = rng.int(8, 20);
       const i = rng.float(0.04, 0.09, 3);
 
@@ -371,8 +383,9 @@ $$C_{\\text{mod}} = \\frac{${n}(${n + 1})}{(1 + ${y})^{2}} = \\frac{${n * (n + 1
       const dueRatio = increasing / ActuarialMath.annuityDue(n, i);
 
       return {
-        questionText: `An annuity-immediate pays 1 at the end of each year for ${n} years. The annual effective interest rate is ${pct(i)}.
-Calculate the Macaulay duration of the annuity, in years.`,
+        questionText: `${buyer} holds an annuity that pays 1 at the end of each year for ${n} years.
+The annual effective interest rate is ${pct(i)}.
+Calculate the Macaulay duration of ${buyer}'s annuity.`,
         variables: { n, i },
         correctValue,
         distractors: [

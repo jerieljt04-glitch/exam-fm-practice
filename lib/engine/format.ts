@@ -1,11 +1,11 @@
 /**
  * Formatting helpers for authored question markup.
  *
- * Every monetary amount that appears in question text, answer options or
- * solution steps must go through these helpers. They emit an escaped `\$`, so
- * the markup tokenizer in `lib/math/markup.ts` can never mistake a price for
- * an inline-math delimiter — the class of bug that turned
- * `the $12^{\text{th}} payment` into literal LaTeX on screen.
+ * Monetary amounts are written the way the SOA writes them in the Exam FM
+ * sample questions: as bare numbers with no currency symbol. That is both the
+ * house style of the exam and the reason the markup tokenizer can no longer
+ * confuse a price with an inline-math delimiter — the class of bug that once
+ * turned `the $12^{\text{th}} payment` into literal LaTeX on screen.
  *
  * Two flavours exist for each quantity:
  *   `money()`     — for prose, outside `$ ... $`.
@@ -30,19 +30,14 @@ export function int(value: number): string {
   return Math.round(value).toLocaleString(LOCALE);
 }
 
-/**
- * Currency for prose. `money(160000, 0)` -> `\$160,000`.
- * A negative amount reads `-\$1,250.00`, never `\$-1,250.00`.
- */
+/** An amount in prose, exam style: `money(1250.5)` -> `1,250.50`. */
 export function money(value: number, decimals = 2): string {
-  const sign = value < 0 ? "-" : "";
-  return `${sign}\\$${num(Math.abs(value), decimals)}`;
+  return num(value, decimals);
 }
 
-/** Whole-dollar currency for prose. `moneyInt(160000)` -> `\$160,000`. */
+/** A whole amount in prose: `moneyInt(160000)` -> `160,000`. */
 export function moneyInt(value: number): string {
-  const sign = value < 0 ? "-" : "";
-  return `${sign}\\$${int(Math.abs(value))}`;
+  return int(value);
 }
 
 /** Digit grouping that is safe inside math mode: `12{,}345.68`. */
@@ -55,16 +50,14 @@ export function mathInt(value: number): string {
   return int(value).replace(/,/g, "{,}");
 }
 
-/** Currency inside math mode: `mathMoney(1250.5)` -> `\$1{,}250.50`. */
+/** An amount inside math mode: `mathMoney(1250.5)` -> `1{,}250.50`. */
 export function mathMoney(value: number, decimals = 2): string {
-  const sign = value < 0 ? "-" : "";
-  return `${sign}\\$${mathNum(Math.abs(value), decimals)}`;
+  return mathNum(value, decimals);
 }
 
-/** Whole-dollar currency inside math mode. */
+/** A whole amount inside math mode. */
 export function mathMoneyInt(value: number): string {
-  const sign = value < 0 ? "-" : "";
-  return `${sign}\\$${mathInt(Math.abs(value))}`;
+  return mathInt(value);
 }
 
 /** Percentage for prose from a decimal rate: `pct(0.061)` -> `6.10%`. */

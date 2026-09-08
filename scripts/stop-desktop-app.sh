@@ -11,25 +11,38 @@ set -euo pipefail
 PORT="${EXAM_FM_PORT:-4173}"
 PIDFILE="$HOME/Library/Application Support/Exam FM Practice/server.pid"
 
-stopped=0
+listening() { nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; }
+ours() { curl -sf --max-time 3 "http://127.0.0.1:$PORT" 2>/dev/null | grep -q "Exam FM Practice"; }
 
-if [ -f "$PIDFILE" ]; then
-  PID="$(cat "$PIDFILE" 2>/dev/null || true)"
-  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
-    kill "$PID" 2>/dev/null && stopped=1
-  fi
+if ! listening; then
   rm -f "$PIDFILE"
+  echo "It was not running."
+  exit 0
 fi
 
-# Also catch a server started before this script existed, or a stale pid file.
-for pid in $(pgrep -f "next start --port $PORT" 2>/dev/null || true); do
-  kill "$pid" 2>/dev/null && stopped=1
-done
-
-sleep 1
-if nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; then
-  echo "Something is still listening on port $PORT."
+if ! ours; then
+  echo "Port $PORT is held by something that is not Exam FM Practice. Leaving it alone."
   exit 1
 fi
 
-[ "$stopped" = "1" ] && echo "Exam FM Practice server stopped." || echo "It was not running."
+# `npm start` forks a child that renames itself to "next-server", so neither
+# process can be found by the command line used to launch it. Kill the recorded
+# npm pid, then whatever still holds the port.
+if [ -f "$PIDFILE" ]; then
+  kill "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null || true
+  rm -f "$PIDFILE"
+fi
+
+for _ in $(seq 1 10); do listening || break; sleep 1; done
+
+if listening; then
+  for pid in $(lsof -ti "tcp:$PORT" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
+  for _ in $(seq 1 10); do listening || break; sleep 1; done
+fi
+
+if listening; then
+  echo "Could not stop the server on port $PORT."
+  exit 1
+fi
+
+echo "Exam FM Practice server stopped."

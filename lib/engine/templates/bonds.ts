@@ -1,5 +1,6 @@
 import { ActuarialMath } from "../financial-math";
 import { mathInt, mathMoney, mathNum, money, moneyInt, ordinal, pct, rate } from "../format";
+import { cast, effectiveRate, nominalRate } from "../style";
 import { distractor, type QuestionTemplateDefinition } from "./types";
 
 /**
@@ -16,6 +17,7 @@ export const BOND_TEMPLATES: QuestionTemplateDefinition[] = [
     topics: ["BONDS_AND_CURVES"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = rng.choice([1000, 10000]);
       const years = rng.choice([10, 15, 20]);
       const couponNominal = rng.float(0.05, 0.09, 3);
@@ -37,9 +39,10 @@ export const BOND_TEMPLATES: QuestionTemplateDefinition[] = [
       const simpleDiscount = (par + coupon * periods) / (1 + yieldNominal * years);
 
       return {
-        questionText: `A ${years}-year bond with par value ${moneyInt(par)} pays semiannual coupons at a nominal annual rate of ${pct(couponNominal)} compounded semiannually.
-The bond is redeemable at par and is bought to yield a nominal annual rate of ${pct(yieldNominal)} compounded semiannually.
-Calculate the price of the bond.`,
+        questionText: `${buyer} buys a ${years}-year bond with par value ${moneyInt(par)}, redeemable at par.
+The bond pays coupons semiannually at ${nominalRate(couponNominal, m)}.
+${buyer} buys the bond to yield ${nominalRate(yieldNominal, m)}.
+Calculate the price ${buyer} pays.`,
         variables: { par, years, couponNominal, yieldNominal, periods, r, y, coupon },
         correctValue,
         distractors: [
@@ -90,6 +93,7 @@ $$P = ${mathNum(coupon)} \\times ${annuityFactor.toFixed(4)} + ${mathInt(par)} \
     topics: ["BONDS_AND_CURVES"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = 1000;
       const years = rng.int(8, 15);
       const couponNominal = rng.float(0.07, 0.1, 3);
@@ -112,8 +116,10 @@ $$P = ${mathNum(coupon)} \\times ${annuityFactor.toFixed(4)} + ${mathInt(par)} \
       const straightLine = (initialPrice - par) / n;
 
       return {
-        questionText: `A ${years}-year bond with par value ${moneyInt(par)} pays semiannual coupons at a nominal annual rate of ${pct(couponNominal)} compounded semiannually. The bond is redeemable at par and is purchased at a premium to yield a nominal annual rate of ${pct(yieldNominal)} compounded semiannually.
-Calculate the amount of premium written down in the $${ordinal(t)}$ coupon payment.`,
+        questionText: `${buyer} buys a ${years}-year bond with par value ${moneyInt(par)}, redeemable at par.
+The bond pays coupons semiannually at ${nominalRate(couponNominal, m)}.
+${buyer} buys the bond at a premium, to yield ${nominalRate(yieldNominal, m)}.
+Calculate the amount of premium written down in the $${ordinal(t)}$ coupon.`,
         variables: { par, years, couponNominal, yieldNominal, n, t, coupon, y },
         correctValue,
         distractors: [
@@ -162,6 +168,7 @@ $$p_{${t}} = ${mathNum(excess, 4)} \\times ${rate(Math.pow(1 + y, -(n - t + 1)),
     topics: ["BONDS_AND_CURVES"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = 1000;
       const firstCallYear = rng.int(5, 8);
       const maturityYear = rng.int(15, 20);
@@ -178,10 +185,10 @@ $$p_{${t}} = ${mathNum(excess, 4)} \\times ${rate(Math.pow(1 + y, -(n - t + 1)),
       const dueVersion = correctValue * (1 + y);
 
       return {
-        questionText: `A ${moneyInt(par)} par value bond pays annual coupons at an annual effective rate of ${pct(r)} and matures at par in ${maturityYear} years.
+        questionText: `A ${moneyInt(par)} par value bond pays annual coupons at ${effectiveRate(r)} and matures at par at the end of year ${maturityYear}.
 The bond is callable at par at the end of year ${firstCallYear} or on any coupon date thereafter.
-An investor wishes to guarantee an annual effective yield of at least ${pct(y)}.
-Calculate the maximum price the investor should pay.`,
+${buyer} wishes to buy the bond and be certain of earning at least ${pct(y)} annual effective.
+Calculate the largest price ${buyer} can pay.`,
         variables: { par, firstCallYear, maturityYear, r, y, coupon },
         correctValue,
         distractors: [
@@ -232,6 +239,7 @@ Pricing to maturity would give ${mathMoney(priceIfHeld)}; paying that much and t
     topics: ["BONDS_AND_CURVES"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = 1000;
       const n = rng.int(6, 15);
       const r = rng.float(0.05, 0.09, 3);
@@ -249,9 +257,9 @@ Pricing to maturity would give ${mathMoney(priceIfHeld)}; paying that much and t
       const shortTerm = ActuarialMath.bondYieldToMaturity(par, r, par, n - 1, price);
 
       return {
-        questionText: `A ${n}-year bond with par value ${moneyInt(par)} pays annual coupons at an annual effective rate of ${pct(r)} and is redeemable at par.
-The bond is currently priced at ${moneyInt(price)}.
-Calculate the annual effective yield to maturity.`,
+        questionText: `A ${n}-year bond with par value ${moneyInt(par)} pays annual coupons at ${effectiveRate(r)} and is redeemable at par.
+${buyer} buys the bond for ${moneyInt(price)}.
+Calculate ${buyer}'s annual effective yield to maturity.`,
         variables: { par, n, r, price, coupon },
         correctValue: solvedYield * 100,
         distractors: [
@@ -301,6 +309,7 @@ $$P(${(solvedYield * 100).toFixed(2)}\\%) = ${mathMoney(ActuarialMath.bondPrice(
     topics: ["BONDS_AND_CURVES"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = 1000;
       const years = rng.choice([8, 10, 12]);
       const couponNominal = rng.float(0.05, 0.09, 3);
@@ -322,8 +331,10 @@ $$P(${(solvedYield * 100).toFixed(2)}\\%) = ${mathMoney(ActuarialMath.bondPrice(
       const dueVersion = coupon * ActuarialMath.annuityDue(remaining, y) + par * Math.pow(1 + y, -remaining);
 
       return {
-        questionText: `A ${years}-year bond with par value ${moneyInt(par)} pays semiannual coupons at a nominal annual rate of ${pct(couponNominal)} compounded semiannually and is redeemable at par. It was purchased to yield a nominal annual rate of ${pct(yieldNominal)} compounded semiannually.
-Calculate the book value of the bond immediately after the $${ordinal(t)}$ coupon is paid.`,
+        questionText: `${buyer} buys a ${years}-year bond with par value ${moneyInt(par)}, redeemable at par.
+The bond pays coupons semiannually at ${nominalRate(couponNominal, m)}.
+${buyer} buys the bond to yield ${nominalRate(yieldNominal, m)}.
+Calculate the book value of ${buyer}'s bond immediately after the $${ordinal(t)}$ coupon is paid.`,
         variables: { par, years, couponNominal, yieldNominal, n, t, coupon, y },
         correctValue,
         distractors: [
@@ -371,6 +382,7 @@ $$B_{${t}} = ${mathNum(coupon)} \\times ${ActuarialMath.annuityImmediate(remaini
     topics: ["BONDS_AND_CURVES"],
     steps: 2,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = 1000;
       const n = rng.int(8, 16);
       const r = rng.float(0.06, 0.09, 3);
@@ -388,8 +400,10 @@ $$B_{${t}} = ${mathNum(coupon)} \\times ${ActuarialMath.annuityImmediate(remaini
       const offByOne = y * nextPeriodBook;
 
       return {
-        questionText: `A ${n}-year bond with par value ${moneyInt(par)} pays annual coupons at an annual effective rate of ${pct(r)} and is redeemable at par. It was purchased to yield an annual effective rate of ${pct(y)}.
-Calculate the interest earned portion of the $${ordinal(t)}$ coupon.`,
+        questionText: `${buyer} buys a ${n}-year bond with par value ${moneyInt(par)}, redeemable at par.
+The bond pays annual coupons at ${effectiveRate(r)}.
+${buyer} buys the bond to yield ${effectiveRate(y)}.
+Calculate the portion of ${buyer}'s $${ordinal(t)}$ coupon that is interest earned.`,
         variables: { par, n, r, y, t, coupon },
         correctValue,
         distractors: [

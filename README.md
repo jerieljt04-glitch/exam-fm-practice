@@ -41,7 +41,9 @@ no window to activate — so if it stayed resident, the second click and every c
 do nothing at all. Exiting means every click reopens the exam.
 
 The server therefore keeps running in the background after the app quits. Clicking again is
-instant, because the launcher finds it already up and just reopens the page. To shut it down:
+instant, because the launcher finds it already up and just reopens the page — unless the source
+files are newer than the running build, in which case it rebuilds and restarts first, so pulling
+new code never leaves the app quietly serving the old one. To shut it down:
 
 ```bash
 npm run app:stop
@@ -140,13 +142,39 @@ Forty-seven templates in total, of which nineteen are level 3+.
 
 ### Relationship to the SOA sample questions
 
-Coverage and difficulty are calibrated against the Society of Actuaries' published *Exam FM
-Sample Questions* (202 items). That document is copyrighted by the SOA, so its questions are not
-reproduced here; it was used to check which archetypes a candidate actually meets and to close
-the gaps — determinants of interest rates, reinvestment yields, second-order price
-approximation, deferred and amortizing swaps. Every question this platform asks is generated,
-with fresh parameters each sitting, which is also what keeps repeated practice useful once the
-sample set has been memorised.
+Coverage, difficulty and *house style* are calibrated against the Society of Actuaries'
+published *Exam FM Sample Questions* (202 items). That document is copyrighted by the SOA, so
+its questions are not reproduced here. It was used for two things: to check which archetypes a
+candidate actually meets, closing the gaps (determinants of interest rates, reinvestment yields,
+second-order price approximation, deferred and amortizing swaps); and to fix how questions are
+written.
+
+Every question this platform asks is generated with fresh parameters each sitting, which is what
+keeps repeated practice useful once the sample set has been memorised.
+
+### House style
+
+The sample set is written to a tight, consistent pattern, measured across all 202 items and
+reproduced by [`lib/engine/style.ts`](lib/engine/style.ts):
+
+| Convention | In the sample set | Here |
+| --- | --- | --- |
+| Currency symbols | zero in 102 pages | none; amounts are bare numbers |
+| Actor | a named person or institution | drawn per question, so it varies by attempt |
+| Givens | one short declarative sentence each, ~5 lines | same |
+| Closing line | "Calculate ..." (153) / "Determine ..." (23) | "Calculate ..." |
+| Rate phrasing | "an annual nominal interest rate of 6% convertible semiannually" | same |
+| Options | whole numbers with commas at 1,000+, else 2 decimals; rates as percentages | same |
+
+So a question reads:
+
+> Hiroshi buys a 9-year bond with par value 1,000, redeemable at par.
+> The bond pays annual coupons at an annual effective interest rate of 6.90%.
+> Hiroshi buys the bond to yield an annual effective interest rate of 4.90%.
+> Calculate the portion of Hiroshi's 5th coupon that is interest earned.
+
+Solutions do not follow the sample set, which publishes none — they keep the stage-by-stage
+derivation described above, in the same numeric conventions.
 
 ## File structure
 

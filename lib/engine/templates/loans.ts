@@ -1,5 +1,6 @@
 import { ActuarialMath } from "../financial-math";
 import { mathInt, mathMoney, mathNum, moneyInt, ordinal, pct, rate } from "../format";
+import { cast, effectiveRate, nominalRate as nominalRatePhrase } from "../style";
 import { distractor, type QuestionTemplateDefinition } from "./types";
 
 /**
@@ -16,6 +17,7 @@ export const LOAN_TEMPLATES: QuestionTemplateDefinition[] = [
     topics: ["TIME_VALUE", "LOAN_MECHANICS"],
     steps: 2,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(15, 50) * 10000;
       const years = rng.choice([15, 20, 25, 30]);
       const nominalRate = rng.float(0.04, 0.08, 3);
@@ -32,9 +34,10 @@ export const LOAN_TEMPLATES: QuestionTemplateDefinition[] = [
       const shortTerm = ActuarialMath.loanPayment(loanAmount, (years - 1) * m, j);
 
       return {
-        questionText: `A borrower takes out a ${moneyInt(loanAmount)} loan to be repaid with equal payments at the end of each month over ${years} years.
-The loan charges a nominal annual interest rate of ${pct(nominalRate)} compounded monthly.
-Calculate the monthly payment.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)} for ${years} years.
+The loan charges ${nominalRatePhrase(nominalRate, m)}.
+${borrower} repays the loan with equal payments at the end of each month.
+Calculate ${borrower}'s monthly payment.`,
         variables: { loanAmount, years, nominalRate, m, totalPayments, j },
         correctValue,
         distractors: [
@@ -85,6 +88,7 @@ $$R = \\frac{${mathMoney(loanAmount, 0)}}{${annuityFactor.toFixed(4)}} = ${mathM
     topics: ["LOAN_MECHANICS"],
     steps: 2,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(10, 30) * 10000;
       const n = rng.int(15, 30);
       const i = rng.float(0.04, 0.08, 3);
@@ -102,8 +106,9 @@ $$R = \\frac{${mathMoney(loanAmount, 0)}}{${annuityFactor.toFixed(4)}} = ${mathM
       const unaccumulatedPayments = loanAmount * Math.pow(1 + i, t) - payment * t;
 
       return {
-        questionText: `A loan of ${moneyInt(loanAmount)} is repaid with equal annual payments at the end of each year for ${n} years at an annual effective interest rate of ${pct(i)}.
-Calculate the outstanding loan balance immediately after the $${ordinal(t)}$ payment is made.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)} at ${effectiveRate(i)}.
+${borrower} repays the loan with equal payments at the end of each year for ${n} years.
+Calculate the loan balance outstanding immediately after ${borrower} makes the $${ordinal(t)}$ payment.`,
         variables: { loanAmount, n, i, t, payment },
         correctValue,
         distractors: [
@@ -152,6 +157,7 @@ $$B_{${t}} = ${mathNum(payment)} \\times ${remainingFactor.toFixed(4)} = ${mathM
     topics: ["LOAN_MECHANICS"],
     steps: 2,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(8, 25) * 10000;
       const n = rng.int(10, 20);
       const i = rng.float(0.05, 0.09, 3);
@@ -166,8 +172,9 @@ $$B_{${t}} = ${mathNum(payment)} \\times ${remainingFactor.toFixed(4)} = ${mathM
       const equalSplit = loanAmount / n;
 
       return {
-        questionText: `A loan of ${moneyInt(loanAmount)} is amortized over ${n} years with level annual payments at an annual effective interest rate of ${pct(i)}.
-Determine the amount of **principal** repaid in the $${ordinal(t)}$ payment.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)} at ${effectiveRate(i)}.
+The loan is amortized with level payments at the end of each year for ${n} years.
+Calculate the amount of principal repaid in ${borrower}'s $${ordinal(t)}$ payment.`,
         variables: { loanAmount, n, i, t, payment },
         correctValue,
         distractors: [
@@ -216,6 +223,7 @@ $$P_{${t}} = ${mathNum(payment)} \\times ${rate(Math.pow(ActuarialMath.v(i), n -
     topics: ["LOAN_MECHANICS"],
     steps: 2,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(6, 20) * 10000;
       const n = rng.int(12, 25);
       const i = rng.float(0.04, 0.08, 3);
@@ -231,8 +239,9 @@ $$P_{${t}} = ${mathNum(payment)} \\times ${rate(Math.pow(ActuarialMath.v(i), n -
       const dueVersion = duePayment * (1 - Math.pow(ActuarialMath.v(i), n - t + 1));
 
       return {
-        questionText: `A loan of ${moneyInt(loanAmount)} is repaid with ${n} level annual payments at an annual effective interest rate of ${pct(i)}.
-Calculate the **interest** portion of the $${ordinal(t)}$ payment.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)} at ${effectiveRate(i)}.
+The loan is repaid with ${n} level payments at the end of each year.
+Calculate the amount of interest contained in ${borrower}'s $${ordinal(t)}$ payment.`,
         variables: { loanAmount, n, i, t, payment },
         correctValue,
         distractors: [
@@ -282,6 +291,7 @@ $$I_{${t}} = ${mathNum(payment)} \\left(1 - ${rate(Math.pow(ActuarialMath.v(i), 
     topics: ["LOAN_MECHANICS"],
     steps: 2,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(10, 40) * 10000;
       const n = rng.int(8, 18);
       const loanRate = rng.float(0.06, 0.10, 3);
@@ -300,8 +310,10 @@ $$I_{${t}} = ${mathNum(payment)} \\left(1 - ${rate(Math.pow(ActuarialMath.v(i), 
         interestService + loanAmount / ActuarialMath.accumulatedAnnuityImmediate(n - 1, fundRate);
 
       return {
-        questionText: `A borrower takes a ${moneyInt(loanAmount)} loan and agrees to pay interest annually at an annual effective rate of ${pct(loanRate)}. The principal is repaid in a single lump sum at the end of ${n} years, funded by level annual deposits into a sinking fund earning an annual effective rate of ${pct(fundRate)}.
-Calculate the borrower's total annual outlay.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)} and pays interest on the loan annually at ${effectiveRate(loanRate)}.
+The principal is repaid in a single payment at the end of ${n} years.
+To fund that repayment ${borrower} makes level deposits at the end of each year into a sinking fund earning ${effectiveRate(fundRate)}.
+Calculate ${borrower}'s total annual outlay.`,
         variables: { loanAmount, n, loanRate, fundRate },
         correctValue,
         distractors: [
@@ -350,6 +362,7 @@ $$I + D = ${mathNum(interestService)} + ${mathNum(sinkingDeposit)} = ${mathMoney
     topics: ["LOAN_MECHANICS"],
     steps: 2,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(10, 35) * 5000;
       const i = rng.float(0.05, 0.09, 3);
       const targetTerm = rng.int(12, 25);
@@ -367,8 +380,9 @@ $$I + D = ${mathNum(interestService)} + ${mathNum(sinkingDeposit)} = ${mathMoney
       const offByOne = correctValue + 1;
 
       return {
-        questionText: `A loan of ${moneyInt(loanAmount)} is repaid with payments of ${moneyInt(payment)} at the end of each year. The annual effective interest rate is ${pct(i)}.
-Calculate the number of years required to repay the loan. Express the answer in years, to two decimal places.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)} at ${effectiveRate(i)}.
+${borrower} repays the loan with payments of ${moneyInt(payment)} at the end of each year.
+Calculate the number of years required to repay the loan.`,
         variables: { loanAmount, payment, i },
         correctValue,
         distractors: [

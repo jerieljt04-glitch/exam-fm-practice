@@ -98,14 +98,43 @@ port_taken() { /usr/bin/nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; }
 [ -d "$REPO" ] || die "The project folder could not be found at:\n\n$REPO\n\nRebuild the app with: npm run app:build"
 cd "$REPO" || die "Could not open $REPO"
 
+# True when the build on disk is missing or older than the sources, which is
+# what happens after pulling or merging new code.
+stale() {
+  [ ! -f .next/BUILD_ID ] && return 0
+  [ -n "$(find app components lib hooks package.json next.config.mjs tailwind.config.js \
+            -newer .next/BUILD_ID -type f -print -quit 2>/dev/null)" ]
+}
+
+# `npm start` forks a child that renames itself to "next-server", so neither
+# process is findable by the command line used to launch it. Kill the recorded
+# npm pid, then whatever still holds the port.
+stop_server() {
+  if [ -f "$PIDFILE" ]; then
+    kill "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null
+    rm -f "$PIDFILE"
+  fi
+  for _ in $(seq 1 10); do port_taken || return 0; sleep 1; done
+  for pid in $(/usr/sbin/lsof -ti "tcp:$PORT" 2>/dev/null); do kill "$pid" 2>/dev/null; done
+  for _ in $(seq 1 10); do port_taken || return 0; sleep 1; done
+}
+
 # The server outlives this launcher, so a click while it is already up simply
 # reopens the page. This script must exit rather than stay resident: macOS will
 # not re-run a running app's executable when its Dock icon is clicked, and this
 # app has no window to activate.
 if alive; then
-  echo "server already running; reopening $URL" >> "$LOG"
-  open "$URL"
-  exit 0
+  if stale; then
+    # New code has landed since the running server started; replace it rather
+    # than silently serving the previous build.
+    echo "sources are newer than the running build; restarting" >> "$LOG"
+    say "Updating to the latest version…"
+    stop_server
+  else
+    echo "server already running; reopening $URL" >> "$LOG"
+    open "$URL"
+    exit 0
+  fi
 fi
 
 port_taken && die "Port $PORT is in use by another program, so the exam server cannot start.\n\nClose it, or rebuild on a different port:\n\nEXAM_FM_PORT=4174 npm run app:build"
@@ -117,19 +146,11 @@ if [ ! -d node_modules ]; then
   npm install >> "$LOG" 2>&1 || die "Dependency installation failed.\n\nSee $LOG"
 fi
 
-# Rebuild when there is no build, or when sources are newer than the last one.
-NEEDS_BUILD=0
-if [ ! -f .next/BUILD_ID ]; then
-  NEEDS_BUILD=1
-elif [ -n "$(find app components lib hooks package.json next.config.mjs tailwind.config.js \
-              -newer .next/BUILD_ID -type f -print -quit 2>/dev/null)" ]; then
-  NEEDS_BUILD=1
-fi
-
-if [ "$NEEDS_BUILD" = "1" ]; then
+if stale; then
   say "Preparing the exam platform — this takes about a minute…"
   npm run build >> "$LOG" 2>&1 || die "The build failed.\n\nSee $LOG"
 fi
+
 
 # Detach the server so it survives this launcher exiting.
 nohup npm start -- --port "$PORT" >> "$LOG" 2>&1 &

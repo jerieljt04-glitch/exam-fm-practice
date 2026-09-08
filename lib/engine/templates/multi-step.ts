@@ -11,6 +11,7 @@ import {
   pct,
   rate,
 } from "../format";
+import { cast, effectiveRate, institution, nominalRate as nominalRatePhrase } from "../style";
 import { distractor, type QuestionTemplateDefinition } from "./types";
 
 /**
@@ -43,6 +44,7 @@ export const MULTI_STEP_TEMPLATES: QuestionTemplateDefinition[] = [
     topics: ["TIME_VALUE", "LOAN_MECHANICS"],
     steps: 3,
     generate: (rng) => {
+      const [lender, borrower] = cast(rng, 2);
       const deposit = rng.int(4, 12) * 5000;
       const a = rng.float(0.02, 0.045, 3);
       const b = rng.float(0.015, 0.03, 3);
@@ -80,10 +82,12 @@ export const MULTI_STEP_TEMPLATES: QuestionTemplateDefinition[] = [
         fund * Math.pow(1 + i, p) - payment * ActuarialMath.accumulatedAnnuityImmediate(p, i);
 
       return {
-        questionText: `A deposit of ${moneyInt(deposit)} is made at time $t = 0$ into a fund whose force of interest is
+        questionText: `${lender} deposits ${moneyInt(deposit)} into a fund at time $t = 0$.
+The fund credits interest at a force of interest
 $$\\delta(t) = \\begin{cases} ${a} & 0 \\le t < ${k} \\\\ ${b} + ${c}t & t \\ge ${k} \\end{cases}$$
-At time $t = ${m}$ the entire fund is lent to a borrower, who repays it with ${n} level annual payments at an annual effective interest rate of ${pct(i)}, the first payment due one year after the loan is made.
-Calculate the outstanding loan balance immediately after the $${ordinal(p)}$ payment.`,
+At time $t = ${m}$ ${lender} lends the entire fund to ${borrower}.
+${borrower} repays the loan with ${n} level annual payments at ${effectiveRate(i)}, the first payment made one year after the loan is granted.
+Calculate the loan balance outstanding immediately after ${borrower}'s $${ordinal(p)}$ payment.`,
         variables: { deposit, a, b, c, k, m, i, n, p },
         correctValue,
         distractors: [
@@ -144,6 +148,7 @@ $$A(${m})(1 + ${i})^{${p}} - R \\cdot s_{\\overline{${p}}|${i}} = ${mathMoney(re
     topics: ["TIME_VALUE", "LOAN_MECHANICS"],
     steps: 3,
     generate: (rng) => {
+      const fund = institution(rng);
       const opening = rng.int(20, 60) * 1000;
       const deposit = rng.int(5, 18) * 1000;
       const withdrawal = rng.int(4, 14) * 1000;
@@ -193,11 +198,10 @@ $$A(${m})(1 + ${i})^{${p}} - R \\cdot s_{\\overline{${p}}|${i}} = ${mathMoney(re
       const simpleReturn = ((closing - opening - deposit + withdrawal) / opening) * 100;
 
       return {
-        questionText: `A fund holds ${moneyInt(opening)} on 1 January. During the year:
-- on 1 April the fund is worth ${money(beforeDeposit)} immediately before a deposit of ${moneyInt(deposit)};
-- on 1 October the fund is worth ${money(beforeWithdrawal)} immediately before a withdrawal of ${moneyInt(withdrawal)}.
-
-The dollar-weighted (money-weighted) yield for the year, computed with the simple-interest exposure approximation, is ${pct(dollarWeighted)}.
+        questionText: `${fund} holds ${moneyInt(opening)} on 1 January.
+On 1 April the fund is worth ${money(beforeDeposit)} immediately before a deposit of ${moneyInt(deposit)} is made.
+On 1 October the fund is worth ${money(beforeWithdrawal)} immediately before a withdrawal of ${moneyInt(withdrawal)} is made.
+The dollar-weighted yield for the year, using the simple-interest exposure approximation, is ${pct(dollarWeighted)}.
 Calculate the time-weighted yield for the year.`,
         variables: {
           opening,
@@ -268,6 +272,7 @@ $$i^{TW} = ${correctValue.toFixed(2)}\\%$$`,
     topics: ["TIME_VALUE", "BONDS_AND_CURVES"],
     steps: 3,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const payment = rng.int(20, 60) * 500;
       const base = rng.float(0.028, 0.045, 4);
       const slope = rng.float(0.003, 0.009, 4);
@@ -293,8 +298,9 @@ $$i^{TW} = ${correctValue.toFixed(2)}\\%$$`,
         questionText: `The annual effective spot rates are ${spots
           .map((spot, index) => `$s_{${index + 1}} = ${mathPct(spot)}$`)
           .join(", ")}.
-An annuity-immediate pays ${moneyInt(payment)} at the end of each of the next ${n} years.
-Calculate the level annual effective yield rate $i$ at which the same ${n} payments have the same present value.`,
+${buyer} will receive ${moneyInt(payment)} at the end of each of the next ${n} years, valued using the spot curve above.
+${buyer} wishes to quote a single annual effective rate that reproduces the same present value.
+Calculate that level annual effective yield rate $i$.`,
         variables: { payment, spots, presentValue },
         correctValue: correctValue * 100,
         distractors: [
@@ -365,6 +371,7 @@ The level yield sits inside the range of the spot rates, ${pct(spots[0])} to ${p
     topics: ["TIME_VALUE", "IMMUNIZATION"],
     steps: 3,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const step = rng.int(2, 8) * 100;
       const n = rng.int(6, 12);
       const m = rng.int(5, 12);
@@ -390,9 +397,11 @@ The level yield sits inside the range of the spot rates, ${pct(spots[0])} to ${p
       for (let t = n + 1; t <= n + m; t += 1) bruteForce += n * step * Math.pow(v, t);
 
       return {
-        questionText: `An annuity-immediate makes payments at the end of each year for ${n + m} years. The payment at the end of year $t$ is $${step}t$ for $t = 1, 2, \\dots, ${n}$, and is level at ${moneyInt(n * step)} for $t = ${n + 1}, \\dots, ${n + m}$.
+        questionText: `${buyer} will receive payments at the end of each year for ${n + m} years.
+For $t = 1, 2, \\dots, ${n}$ the payment at the end of year $t$ is $${step}t$.
+For $t = ${n + 1}, \\dots, ${n + m}$ the payment is level at ${moneyInt(n * step)}.
 The annual effective interest rate is ${pct(i)}.
-Calculate the present value of the annuity.`,
+Calculate the present value of ${buyer}'s payments.`,
         variables: { step, n, m, i },
         correctValue,
         distractors: [
@@ -449,6 +458,7 @@ $$PV = ${mathNum(increasingBlock)} + ${mathNum(levelBlock)} = ${mathMoney(correc
     topics: ["TIME_VALUE", "IMMUNIZATION"],
     steps: 3,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const step = rng.int(4, 20) * 250;
       const n = rng.int(8, 20);
       const i = rng.float(0.04, 0.09, 3);
@@ -475,9 +485,10 @@ $$PV = ${mathNum(increasingBlock)} + ${mathNum(levelBlock)} = ${mathMoney(correc
       simpson *= (h / 3) * step;
 
       return {
-        questionText: `An annuity is payable continuously for ${n} years. At time $t$ the payment rate is $${step}t$ per year.
+        questionText: `${buyer} receives payments continuously for ${n} years.
+At time $t$ the payment rate is $${step}t$ per year.
 The annual effective interest rate is ${pct(i)}.
-Calculate the present value of the annuity.`,
+Calculate the present value of ${buyer}'s payments.`,
         variables: { step, n, i, delta },
         correctValue,
         distractors: [
@@ -536,6 +547,7 @@ $$PV = ${mathInt(step)} \\times ${num(factor, 4)} = ${mathMoney(correctValue)}$$
     topics: ["LOAN_MECHANICS", "TIME_VALUE"],
     steps: 3,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(12, 40) * 10000;
       const n = rng.int(14, 24);
       const k = rng.int(4, 8);
@@ -559,9 +571,11 @@ $$PV = ${mathInt(step)} \\times ${num(factor, 4)} = ${mathMoney(correctValue)}$$
         interestService + balance / ActuarialMath.accumulatedAnnuityImmediate(n, fundRate);
 
       return {
-        questionText: `A loan of ${moneyInt(loanAmount)} is being repaid with ${n} level annual payments at an annual effective interest rate of ${pct(loanRate)}.
-Immediately after the $${ordinal(k)}$ payment the borrower renegotiates. For the remaining ${n - k} years the borrower will pay interest annually at ${pct(loanRate)} on the balance outstanding at the renegotiation date, and will make level annual deposits into a sinking fund earning ${pct(fundRate)} so that the fund exactly repays that balance at the end of year ${n}.
-Calculate the borrower's total annual outlay under the new arrangement.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)} at ${effectiveRate(loanRate)}, to be repaid with ${n} level annual payments.
+Immediately after the $${ordinal(k)}$ payment ${borrower} renegotiates the loan.
+For each of the remaining ${n - k} years ${borrower} pays interest at ${pct(loanRate)} on the balance outstanding at the renegotiation date, and makes a level deposit into a sinking fund earning ${effectiveRate(fundRate)}.
+The sinking fund exactly repays that balance at the end of year ${n}.
+Calculate ${borrower}'s total annual outlay under the new arrangement.`,
         variables: { loanAmount, n, k, loanRate, fundRate },
         correctValue,
         distractors: [
@@ -619,6 +633,7 @@ Note the outlay exceeds the original payment of ${money(originalPayment)}, becau
     topics: ["LOAN_MECHANICS", "TIME_VALUE"],
     steps: 3,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(12, 40) * 5000;
       const i = rng.float(0.05, 0.09, 3);
       const nominalTerm = rng.int(12, 20);
@@ -645,8 +660,10 @@ Note the outlay exceeds the original payment of ${money(originalPayment)}, becau
         correctValue * Math.pow(1 + i, -(fullPayments + 1));
 
       return {
-        questionText: `A loan of ${moneyInt(loanAmount)} is repaid with payments of ${moneyInt(payment)} at the end of each year for as many full payments as possible, followed by a smaller final payment one year after the last full payment. The annual effective interest rate is ${pct(i)}.
-Calculate the amount of the final payment.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)} at ${effectiveRate(i)}.
+${borrower} repays the loan with payments of ${moneyInt(payment)} at the end of each year for as many full payments as possible.
+A smaller final payment is made one year after the last full payment.
+Calculate the amount of ${borrower}'s final payment.`,
         variables: { loanAmount, payment, i, fullPayments },
         correctValue,
         distractors: [
@@ -709,6 +726,7 @@ $$R \\cdot a_{\\overline{${fullPayments}}|} + ${mathNum(correctValue)}\\,v^{${fu
     topics: ["LOAN_MECHANICS", "TIME_VALUE"],
     steps: 4,
     generate: (rng) => {
+      const [borrower] = cast(rng);
       const loanAmount = rng.int(15, 45) * 10000;
       const n = rng.int(15, 25);
       const k = rng.int(5, 9);
@@ -731,9 +749,10 @@ $$R \\cdot a_{\\overline{${fullPayments}}|} + ${mathNum(correctValue)}\\,v^{${fu
       const totalPaidNotInterest = totalPaid;
 
       return {
-        questionText: `A loan of ${moneyInt(loanAmount)} is to be repaid with ${n} level annual payments at an annual effective interest rate of ${pct(firstRate)}.
-Immediately after the $${ordinal(k)}$ payment the interest rate resets to ${pct(secondRate)}. The payment is recalculated so that the loan is still fully repaid by the end of year ${n}.
-Calculate the total interest paid over the life of the loan.`,
+        questionText: `${borrower} borrows ${moneyInt(loanAmount)}, to be repaid with ${n} level annual payments at ${effectiveRate(firstRate)}.
+Immediately after the $${ordinal(k)}$ payment the interest rate resets to ${pct(secondRate)}.
+${borrower}'s payment is recalculated so that the loan is still fully repaid at the end of year ${n}.
+Calculate the total interest ${borrower} pays over the life of the loan.`,
         variables: { loanAmount, n, k, firstRate, secondRate },
         correctValue,
         distractors: [
@@ -799,6 +818,7 @@ $$\\text{Interest} = ${mathNum(totalPaid)} - ${mathInt(loanAmount)} = ${mathMone
     topics: ["BONDS_AND_CURVES", "IMMUNIZATION"],
     steps: 3,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = 1000;
       const couponRate = rng.float(0.05, 0.09, 3);
       const base = rng.float(0.03, 0.05, 4);
@@ -827,8 +847,9 @@ $$\\text{Interest} = ${mathNum(totalPaid)} - ${mathInt(loanAmount)} = ${mathMone
         questionText: `The annual effective spot rates are ${spots
           .map((spot, index) => `$s_{${index + 1}} = ${mathPct(spot)}$`)
           .join(", ")}.
-A ${n}-year bond with par value ${moneyInt(par)} pays annual coupons at an annual rate of ${pct(couponRate)} and is redeemable at par. It is priced consistently with the spot curve.
-Calculate the Macaulay duration of the bond, in years, measured at its yield to maturity.`,
+${buyer} buys a ${n}-year bond with par value ${moneyInt(par)}, redeemable at par.
+The bond pays annual coupons at ${effectiveRate(couponRate)} and is priced consistently with the spot curve above.
+Calculate the Macaulay duration of ${buyer}'s bond, measured at its yield to maturity.`,
         variables: { par, couponRate, spots, price },
         correctValue,
         distractors: [
@@ -898,6 +919,7 @@ $$D_{\\text{mac}} = \\frac{\\sum t \\cdot C_t (1+y)^{-t}}{P} = \\frac{${mathNum(
     topics: ["TIME_VALUE", "BONDS_AND_CURVES"],
     steps: 4,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const halfYearDeposit = rng.int(10, 36) * 100;
       const savingYears = rng.int(6, 11);
       const nominalRate = rng.float(0.04, 0.075, 3);
@@ -927,9 +949,10 @@ $$D_{\\text{mac}} = \\frac{\\sum t \\cdot C_t (1+y)^{-t}}{P} = \\frac{${mathNum(
       const lateCall = ActuarialMath.levelYield(flowsTo(callYear + 1), fund);
 
       return {
-        questionText: `An investor deposits ${moneyInt(halfYearDeposit)} at the end of every six months for ${savingYears} years into an account earning a nominal annual rate of ${pct(nominalRate)} compounded semiannually.
-The accumulated balance is used, in full, to buy a bond with par value ${moneyInt(par)} paying annual coupons at an annual rate of ${pct(couponRate)}. The bond is redeemable at par, callable at par at the end of year ${callYear} or on any coupon date thereafter, and matures at the end of year ${maturityYear}.
-Calculate the annual effective yield rate the investor is guaranteed to earn.`,
+        questionText: `${buyer} deposits ${moneyInt(halfYearDeposit)} at the end of every six months for ${savingYears} years into an account earning ${nominalRatePhrase(nominalRate, 2)}.
+${buyer} then uses the entire accumulated balance to buy a bond with par value ${moneyInt(par)}, redeemable at par, paying annual coupons at ${effectiveRate(couponRate)}.
+The bond is callable at par at the end of year ${callYear} or on any coupon date thereafter, and matures at the end of year ${maturityYear}.
+Calculate the annual effective yield rate ${buyer} is certain to earn.`,
         variables: {
           halfYearDeposit,
           savingYears,
@@ -979,7 +1002,7 @@ $$${mathNum(fund)} = ${mathNum(coupon)}\\,a_{\\overline{${callYear}}|y} + ${math
 
 **Step 4 — Yield if the bond runs to maturity, year ${maturityYear}.**
 $$y = ${(yieldIfHeld * 100).toFixed(4)}\\%$$
-Because the bond was bought at a premium, the earliest call gives the lower return. The issuer controls the call, so the investor is guaranteed only
+Because the bond was bought at a premium, the earliest call gives the lower return. The issuer controls the call, so ${buyer} is guaranteed only
 $$y_{\\min} = ${(correctValue * 100).toFixed(2)}\\%$$`,
         checks: [
           {
@@ -1015,6 +1038,7 @@ $$y_{\\min} = ${(correctValue * 100).toFixed(2)}\\%$$`,
     topics: ["SWAPS", "BONDS_AND_CURVES"],
     steps: 3,
     generate: (rng) => {
+      const company = institution(rng);
       const base = rng.float(0.025, 0.04, 4);
       const slope = rng.float(0.004, 0.009, 4);
       const spots = [0, 1, 2, 3].map((offset) => Number((base + slope * offset).toFixed(6)));
@@ -1035,8 +1059,9 @@ $$y_{\\min} = ${(correctValue * 100).toFixed(2)}\\%$$`,
         questionText: `The annual effective spot rates are ${spots
           .map((spot, index) => `$s_{${index + 1}} = ${mathPct(spot)}$`)
           .join(", ")}.
-A company enters an interest rate swap deferred one year: settlements occur at the end of years 2, 3 and 4, with no settlement at the end of year 1.
-Calculate the par swap rate on this deferred swap.`,
+${company} enters an interest rate swap deferred one year.
+Settlements occur at the end of years 2, 3 and 4. There is no settlement at the end of year 1.
+Calculate the par swap rate ${company} will pay.`,
         variables: { spots },
         correctValue: correctValue * 100,
         distractors: [
@@ -1101,6 +1126,7 @@ $$R = \\frac{${rate(factors[0] - factors[3], 4)}}{${rate(deferredAnnuity, 4)}} =
     topics: ["SWAPS", "BONDS_AND_CURVES"],
     steps: 4,
     generate: (rng) => {
+      const company = institution(rng);
       const notional = rng.int(2, 10) * 500000;
 
       const baseOriginal = rng.float(0.045, 0.065, 4);
@@ -1129,13 +1155,15 @@ $$R = \\frac{${rate(factors[0] - factors[3], 4)}}{${rate(deferredAnnuity, 4)}} =
       const undiscountedCount = notional * (originalRate - currentRate) * currentFactors.length;
 
       return {
-        questionText: `One year ago a company entered a four-year interest rate swap on a notional of ${moneyInt(notional)}, with annual settlements, as the **fixed-rate receiver**. The swap was priced at the market rate implied by the then-current spot curve ${originalSpots
+        questionText: `One year ago ${company} entered a four-year interest rate swap on a notional of ${moneyInt(notional)}, with annual settlements, as the fixed-rate receiver.
+The swap was priced at the market rate implied by the spot curve then in effect: ${originalSpots
           .map((spot, index) => `$s_{${index + 1}} = ${mathPct(spot)}$`)
           .join(", ")}.
-Three settlements remain. The spot curve today is ${currentSpots
+Three settlements remain.
+The spot curve today is ${currentSpots
           .map((spot, index) => `$s_{${index + 1}} = ${mathPct(spot)}$`)
           .join(", ")}.
-Calculate the current market value of the swap to the company.`,
+Calculate the market value of the swap to ${company} today.`,
         variables: { notional, originalSpots, currentSpots, originalRate, currentRate },
         correctValue,
         distractors: [
@@ -1178,7 +1206,7 @@ $$\\sum P'(0,t) = ${rate(currentAnnuity, 4)}$$
 $$R_1 = \\frac{1 - ${rate(currentFactors[2], 4)}}{${rate(currentAnnuity, 4)}} = ${(currentRate * 100).toFixed(4)}\\%$$
 
 **Step 4 — Value the rate advantage to the fixed-rate receiver.**
-The company receives ${pct(originalRate)} where the market now pays ${pct(currentRate)}, an advantage of ${pct(originalRate - currentRate)} on the notional at each remaining settlement:
+${company} receives ${pct(originalRate)} where the market now pays ${pct(currentRate)}, an advantage of ${pct(originalRate - currentRate)} on the notional at each remaining settlement:
 $$MV = ${mathInt(notional)} \\times ${rate(originalRate - currentRate, 4)} \\times ${rate(currentAnnuity, 4)} = ${mathMoney(correctValue)}$$`,
         checks: [
           {
@@ -1205,6 +1233,7 @@ $$MV = ${mathInt(notional)} \\times ${rate(originalRate - currentRate, 4)} \\tim
     topics: ["IMMUNIZATION", "TIME_VALUE"],
     steps: 4,
     generate: (rng) => {
+      const insurer = institution(rng);
       const annualLiability = rng.int(4, 14) * 10000;
       const n = rng.int(12, 20);
       const i = rng.float(0.045, 0.08, 3);
@@ -1231,8 +1260,9 @@ $$MV = ${mathInt(notional)} \\times ${rate(originalRate - currentRate, 4)} \\tim
       const equalSplit = (liabilityPv / 2) * Math.pow(1 + i, longMaturity);
 
       return {
-        questionText: `An insurer owes ${moneyInt(annualLiability)} at the end of each year for the next ${n} years. The annual effective interest rate is ${pct(i)} at all maturities.
-The insurer immunizes the liability with two zero-coupon bonds maturing at $t = ${shortMaturity}$ and $t = ${longMaturity}$, matching both the present value and the Macaulay duration of the liability.
+        questionText: `${insurer} must pay ${moneyInt(annualLiability)} at the end of each year for the next ${n} years.
+The annual effective interest rate is ${pct(i)} at all maturities.
+${insurer} immunizes the liability with two zero-coupon bonds, one maturing at $t = ${shortMaturity}$ and one at $t = ${longMaturity}$, matching both the present value and the Macaulay duration of the liability.
 Calculate the maturity value of the bond maturing at $t = ${longMaturity}$.`,
         variables: { annualLiability, n, i, shortMaturity, longMaturity },
         correctValue,
@@ -1308,6 +1338,7 @@ $$A_{${longMaturity}} = ${mathNum(longPv)} \\times (1 + ${i})^{${longMaturity}} 
     topics: ["TIME_VALUE", "RATE_DETERMINANTS"],
     steps: 3,
     generate: (rng) => {
+      const [saver] = cast(rng);
       const deposit = rng.int(15, 60) * 100;
       const n = rng.int(10, 22);
       const nominal = rng.float(0.05, 0.09, 3);
@@ -1326,8 +1357,9 @@ $$A_{${longMaturity}} = ${mathNum(longPv)} \\times (1 + ${i})^{${longMaturity}} 
       const linearDeflator = nominalValue * (1 - inflation * n);
 
       return {
-        questionText: `A saver deposits ${moneyInt(deposit)} at the end of each year for ${n} years into an account earning an annual effective interest rate of ${pct(nominal)}. Over the same period the annual rate of inflation is ${pct(inflation)}.
-Calculate the accumulated value of the account at the end of year ${n}, expressed in the purchasing power of money at time $t = 0$.`,
+        questionText: `${saver} deposits ${moneyInt(deposit)} at the end of each year for ${n} years into an account earning ${effectiveRate(nominal)}.
+Over the same period the annual rate of inflation is ${pct(inflation)}.
+Calculate the accumulated value of ${saver}'s account at the end of year ${n}, expressed in the purchasing power of money at time $t = 0$.`,
         variables: { deposit, n, nominal, inflation },
         correctValue,
         distractors: [
@@ -1385,6 +1417,7 @@ Equivalently, the real rate is $\\frac{1 + ${nominal}}{1 + ${inflation}} - 1 = $
     topics: ["TIME_VALUE", "BONDS_AND_CURVES"],
     steps: 3,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const price = rng.int(20, 70) * 1000;
       const n = rng.int(8, 16);
       const couponRate = rng.float(0.06, 0.1, 3);
@@ -1406,9 +1439,10 @@ Equivalently, the real rate is $\\frac{1 + ${nominal}}{1 + ${inflation}} - 1 = $
       const simpleAverage = (couponRate + reinvestRate) / 2;
 
       return {
-        questionText: `An investor pays ${moneyInt(price)} for a ${n}-year investment that pays ${moneyInt(payment)} at the end of each year and returns the original ${moneyInt(price)} at the end of year ${n}.
-Each annual payment is immediately reinvested in an account earning an annual effective rate of ${pct(reinvestRate)}.
-Calculate the investor's annual effective yield over the ${n}-year period.`,
+        questionText: `${buyer} pays ${moneyInt(price)} for a ${n}-year investment.
+The investment pays ${moneyInt(payment)} at the end of each year and returns the original ${moneyInt(price)} at the end of year ${n}.
+${buyer} immediately reinvests each annual payment in an account earning ${effectiveRate(reinvestRate)}.
+Calculate ${buyer}'s annual effective yield over the ${n}-year period.`,
         variables: { price, n, couponRate, reinvestRate, payment },
         correctValue: correctValue * 100,
         distractors: [
@@ -1470,6 +1504,7 @@ The realised yield sits below the ${pct(couponRate)} the investment pays, becaus
     topics: ["IMMUNIZATION", "BONDS_AND_CURVES"],
     steps: 3,
     generate: (rng) => {
+      const [buyer] = cast(rng);
       const par = 1000;
       const n = rng.int(8, 18);
       const couponRate = rng.float(0.04, 0.08, 3);
@@ -1507,9 +1542,10 @@ The realised yield sits below the ${pct(couponRate)} the investment pays, becaus
       );
 
       return {
-        questionText: `A ${n}-year bond with par value ${moneyInt(par)} pays annual coupons at an annual rate of ${pct(couponRate)} and is redeemable at par. It is priced at an annual effective yield of ${pct(yieldRate)}.
+        questionText: `${buyer} owns a ${n}-year bond with par value ${moneyInt(par)}, redeemable at par.
+The bond pays annual coupons at ${effectiveRate(couponRate)} and is priced at an annual effective yield of ${pct(yieldRate)}.
 The yield rises by ${basisPoints} basis points.
-Using the second-order approximation based on modified duration and modified convexity, estimate the new price of the bond.`,
+Using the second-order approximation based on modified duration and modified convexity, calculate the new price of ${buyer}'s bond.`,
         variables: { par, n, couponRate, yieldRate, basisPoints, price },
         correctValue,
         distractors: [
@@ -1571,6 +1607,7 @@ Repricing exactly at ${pct(yieldRate + shift)} gives ${money(exactPrice)}; the c
     topics: ["SWAPS", "LOAN_MECHANICS"],
     steps: 4,
     generate: (rng) => {
+      const company = institution(rng);
       const principal = rng.int(2, 8) * 100000;
       const n = 4;
       const base = rng.float(0.026, 0.042, 4);
@@ -1627,12 +1664,13 @@ Repricing exactly at ${pct(yieldRate + shift)} gives ${money(exactPrice)}; the c
       const levelCheck = levelCheckNumerator / levelCheckDenominator;
 
       return {
-        questionText: `A company borrows ${moneyInt(principal)} and repays the principal in ${n} equal instalments of ${moneyInt(repayment)} at the end of each year, paying floating interest annually on the balance outstanding at the start of each year.
-To fix its interest cost the company enters an interest rate swap whose notional in each year equals that outstanding balance.
+        questionText: `${company} borrows ${moneyInt(principal)} and repays the principal in ${n} equal instalments of ${moneyInt(repayment)} at the end of each year.
+${company} pays floating interest annually on the balance outstanding at the start of each year.
+To fix its interest cost ${company} enters an interest rate swap whose notional in each year equals that outstanding balance.
 The annual effective spot rates are ${spots
           .map((spot, index) => `$s_{${index + 1}} = ${mathPct(spot)}$`)
           .join(", ")}.
-Calculate the swap rate.`,
+Calculate the swap rate ${company} will pay.`,
         variables: { principal, n, spots, notionals },
         correctValue: correctValue * 100,
         distractors: [

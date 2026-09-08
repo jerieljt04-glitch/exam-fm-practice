@@ -1,4 +1,5 @@
-import { mathInt, mathMoney, mathNum, moneyInt, pct, rate } from "../format";
+import { mathInt, mathMoney, mathNum, moneyInt, rate } from "../format";
+import { cast, effectiveRate, nominalRate } from "../style";
 import { distractor, type QuestionTemplateDefinition } from "./types";
 
 /**
@@ -15,6 +16,7 @@ export const TIME_VALUE_OF_MONEY_TEMPLATES: QuestionTemplateDefinition[] = [
     topics: ["TIME_VALUE"],
     steps: 2,
     generate: (rng) => {
+      const [saver] = cast(rng);
       const deposit = rng.int(2, 10) * 1000;
       const a = rng.float(0.02, 0.04, 3);
       const b = rng.float(0.002, 0.006, 4);
@@ -30,9 +32,10 @@ export const TIME_VALUE_OF_MONEY_TEMPLATES: QuestionTemplateDefinition[] = [
       const constantForce = deposit * Math.exp(a * t);
 
       return {
-        questionText: `An investor deposits ${moneyInt(deposit)} into a fund at time $t = 0$. The force of interest at time $t$ is given by
-$$\\delta(t) = ${a} + ${b}t$$
-Calculate the accumulated value of the fund at time $t = ${t}$.`,
+        questionText: `${saver} deposits ${moneyInt(deposit)} into a fund at time $t = 0$.
+The fund credits interest at a force of interest
+$$\\delta(t) = ${a} + ${b}t, \\qquad t \\ge 0$$
+Calculate the accumulated value of ${saver}'s fund at time $t = ${t}$.`,
         variables: { deposit, a, b, t },
         correctValue,
         distractors: [
@@ -80,6 +83,7 @@ $$A(${t}) = ${mathMoney(deposit, 0)} \\cdot e^{${rate(integral, 5)}} = ${mathMon
     topics: ["TIME_VALUE"],
     steps: 2,
     generate: (rng) => {
+      const [saver] = cast(rng);
       const dNominal = rng.float(0.05, 0.09, 3);
       const p = rng.choice([2, 4, 12]);
       const frequency = p === 2 ? "semiannually" : p === 4 ? "quarterly" : "monthly";
@@ -93,8 +97,9 @@ $$A(${t}) = ${mathMoney(deposit, 0)} \\cdot e^{${rate(integral, 5)}} = ${mathMon
       const effectiveDiscount = 1 - annualDiscountFactor;
 
       return {
-        questionText: `A fund credits interest at a nominal rate of discount of ${pct(dNominal)} compounded ${frequency}.
-Calculate the equivalent annual effective rate of interest $i$.`,
+        questionText: `${saver} invests in a fund that credits interest at ${nominalRate(dNominal, p, "discount")}.
+${saver} wishes to compare this fund with one quoting an annual effective interest rate.
+Calculate the annual effective interest rate $i$ equivalent to the fund's rate.`,
         variables: { dNominal, p, frequency },
         correctValue: iEffective * 100,
         distractors: [
@@ -139,6 +144,7 @@ $$i = \\frac{1}{${rate(annualDiscountFactor)}} - 1 = ${(iEffective * 100).toFixe
     topics: ["TIME_VALUE"],
     steps: 2,
     generate: (rng) => {
+      const [saver] = cast(rng);
       const i = rng.float(0.04, 0.08, 3);
       const c1 = rng.int(2, 6) * 1000;
       const t1 = rng.int(2, 4);
@@ -157,8 +163,10 @@ $$i = \\frac{1}{${rate(annualDiscountFactor)}} - 1 = ${(iEffective * 100).toFixe
       const noInterest = c1 + c2;
 
       return {
-        questionText: `Deposits of ${moneyInt(c1)} at time $t = ${t1}$ and ${moneyInt(c2)} at time $t = ${t2}$ are made into a fund earning an annual effective interest rate of ${pct(i)}.
-Determine the accumulated value of the fund at time $t = ${valuationTime}$.`,
+        questionText: `${saver} deposits ${moneyInt(c1)} into a fund at time $t = ${t1}$.
+${saver} deposits a further ${moneyInt(c2)} into the same fund at time $t = ${t2}$.
+The fund earns ${effectiveRate(i)}.
+Calculate the accumulated value of the fund at time $t = ${valuationTime}$.`,
         variables: { i, c1, t1, c2, t2, valuationTime },
         correctValue,
         distractors: [
@@ -206,6 +214,7 @@ $$AV_{${valuationTime}} = ${mathNum(c1 * factor1)} + ${mathNum(c2 * factor2)} = 
     topics: ["TIME_VALUE"],
     steps: 2,
     generate: (rng) => {
+      const [saver] = cast(rng);
       const m = rng.choice([2, 4]);
       const p = rng.choice([4, 12]);
       const iNominal = rng.float(0.05, 0.09, 3);
@@ -218,12 +227,12 @@ $$AV_{${valuationTime}} = ${mathNum(c1 * factor1)} + ${mathNum(c2 * factor2)} = 
       const unconverted = iNominal;
       const simpleConversion = iNominal / (1 + iNominal);
 
-      const mName = m === 2 ? "semiannually" : "quarterly";
       const pName = p === 4 ? "quarterly" : "monthly";
 
       return {
-        questionText: `A deposit earns interest at a nominal annual rate of ${pct(iNominal)} compounded ${mName}.
-Calculate the equivalent nominal annual rate of **discount** compounded ${pName}, $d^{(${p})}$.`,
+        questionText: `${saver} deposits money into an account earning ${nominalRate(iNominal, m)}.
+A second account quotes its terms as a nominal annual discount rate convertible ${pName}.
+Calculate the rate $d^{(${p})}$ the second account must quote for the two accounts to be equivalent.`,
         variables: { m, p, iNominal, iEffective },
         correctValue: correctValue * 100,
         distractors: [
@@ -272,6 +281,7 @@ $$d^{(${p})} = ${p}\\left[1 - ${rate(Math.pow(1 + iEffective, -1 / p))}\\right] 
     topics: ["TIME_VALUE"],
     steps: 2,
     generate: (rng) => {
+      const [saver] = cast(rng);
       const principal = rng.int(3, 12) * 1000;
       const multiple = rng.choice([2, 2.5, 3]);
       const target = principal * multiple;
@@ -285,8 +295,9 @@ $$d^{(${p})} = ${p}\\left[1 - ${rate(Math.pow(1 + iEffective, -1 / p))}\\right] 
       const offByOne = correctValue - 1;
 
       return {
-        questionText: `A deposit of ${moneyInt(principal)} is invested in a fund earning an annual effective interest rate of ${pct(i)}.
-Calculate the number of years required for the fund to accumulate to ${moneyInt(target)}. Express the answer in years, to two decimal places.`,
+        questionText: `${saver} invests ${moneyInt(principal)} in a fund earning ${effectiveRate(i)}.
+${saver} will withdraw the money once the fund reaches ${moneyInt(target)}.
+Calculate the number of years ${saver} must wait.`,
         variables: { principal, target, multiple, i },
         correctValue,
         distractors: [
@@ -333,6 +344,7 @@ $$t = \\frac{${rate(Math.log(multiple))}}{${rate(Math.log(1 + i))}} = ${correctV
     topics: ["TIME_VALUE"],
     steps: 1,
     generate: (rng) => {
+      const [saver] = cast(rng);
       const futureValue = rng.int(15, 60) * 1000;
       const delta = rng.float(0.03, 0.08, 3);
       const t = rng.int(5, 12);
@@ -345,8 +357,9 @@ $$t = \\frac{${rate(Math.log(multiple))}}{${rate(Math.log(1 + i))}} = ${correctV
       const offByOne = futureValue * Math.exp(-delta * (t - 1));
 
       return {
-        questionText: `An obligation of ${moneyInt(futureValue)} is due in ${t} years. Interest is credited continuously at a constant force of interest $\\delta = ${delta}$.
-Calculate the amount that must be invested today to exactly meet the obligation.`,
+        questionText: `${saver} must pay ${moneyInt(futureValue)} at the end of ${t} years.
+${saver} sets money aside today in a fund credited at an annual force of interest of ${delta}.
+Calculate the amount ${saver} must invest today to exactly meet the payment.`,
         variables: { futureValue, delta, t },
         correctValue,
         distractors: [
