@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { examRepository } from "@/lib/db";
 import { OPTION_KEYS } from "@/lib/exam-config";
+import type { ConfidenceLevel } from "@/lib/types/exam";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,13 @@ type PatchBody =
   | { action: "TOGGLE_PAUSE"; isPaused: boolean }
   | { action: "SELECT_OPTION"; questionId: string; selectedOption: string | null }
   | { action: "TOGGLE_FLAG"; questionId: string; isFlagged: boolean }
-  | { action: "HEARTBEAT" }
+  | {
+      action: "UPDATE_META";
+      questionId: string;
+      confidence?: ConfidenceLevel | null;
+      timeSpentSeconds?: number;
+      calculatorUsed?: boolean;
+    }
   | { action: "ABANDON" };
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -87,16 +94,31 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         return NextResponse.json({ success: true });
       }
 
-      case "HEARTBEAT": {
-        const session = await examRepository.recordHeartbeat(params.id);
-        if (!session) {
+      case "UPDATE_META": {
+        const confidenceIsValid =
+          body.confidence === undefined ||
+          body.confidence === null ||
+          ["SURE", "UNSURE", "GUESS"].includes(body.confidence);
+        if (
+          !body.questionId ||
+          !confidenceIsValid ||
+          (body.timeSpentSeconds !== undefined &&
+            (!Number.isFinite(body.timeSpentSeconds) || body.timeSpentSeconds < 0)) ||
+          (body.calculatorUsed !== undefined && typeof body.calculatorUsed !== "boolean")
+        ) {
           return NextResponse.json(
-            { success: false, error: "Exam session not found" },
-            { status: 404 }
+            { success: false, error: "Invalid question study metadata" },
+            { status: 400 }
           );
         }
-        return NextResponse.json({ success: true, status: session.status });
+        await examRepository.updateQuestionMeta(params.id, body.questionId, {
+          confidence: body.confidence,
+          timeSpentSeconds: body.timeSpentSeconds,
+          calculatorUsed: body.calculatorUsed,
+        });
+        return NextResponse.json({ success: true });
       }
+
 
       case "ABANDON": {
         await examRepository.abandonExam(params.id);

@@ -15,6 +15,9 @@ export type DistractorType =
   | "NOMINAL_RATE_ERROR"
   | "CALCULATION_DISTRACTOR";
 
+export type ExamMode = "EXAM" | "PRACTICE" | "MISTAKES";
+export type ConfidenceLevel = "SURE" | "UNSURE" | "GUESS";
+
 export interface RenderedOption {
   key: OptionKey;
   /** Authored in the markup dialect of `lib/math/markup.ts`. */
@@ -42,6 +45,12 @@ export interface ExamQuestionData {
   renderedOptions: RenderedOption[];
   selectedOption: string | null;
   isFlagged?: boolean;
+  /** Candidate confidence, captured independently from the selected answer. */
+  confidence?: ConfidenceLevel | null;
+  /** Active seconds spent while this question was on screen. */
+  timeSpentSeconds?: number;
+  /** Self-reported use of an approved financial calculator on this item. */
+  calculatorUsed?: boolean;
   /** Parameter set drawn for this instance, including its generation seed. */
   variables: Record<string, unknown>;
   isCorrect: boolean | null;
@@ -62,6 +71,12 @@ export interface ExamSessionData {
   lastSeenAt: string;
   /** 9000 seconds = 150 minutes. */
   durationSeconds: number;
+  mode: ExamMode;
+  /** Practice sessions can disable the countdown and reveal feedback immediately. */
+  isTimed: boolean;
+  immediateFeedback: boolean;
+  formulaSheetEnabled: boolean;
+  includeLegacy: boolean;
   status: ExamStatus;
   questions: ExamQuestionData[];
 }
@@ -82,6 +97,8 @@ export interface ExamReviewData {
   userId: string;
   startTime: string;
   endTime: string;
+  mode: ExamMode;
+  isTimed: boolean;
   totalQuestions: number;
   correctCount: number;
   unansweredCount: number;

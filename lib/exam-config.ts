@@ -19,16 +19,6 @@ export const EXAM_DURATION_SECONDS = EXAM_DURATION_MINUTES * 60;
 export const OPTION_KEYS = ["A", "B", "C", "D", "E"] as const;
 export type OptionKey = (typeof OPTION_KEYS)[number];
 
-/**
- * How long a sitting may go without a sign of life from the browser before it
- * is treated as abandoned. The exam page sends a heartbeat every 10 seconds, so
- * a reload survives comfortably while a closed tab does not.
- */
-export const ABANDON_AFTER_MS = 30_000;
-
-/** How often the exam page reports that it is still open. */
-export const HEARTBEAT_INTERVAL_MS = 10_000;
-
 /** Passing benchmark used by this platform's diagnostics: 70% (21 of 30). */
 export const PASS_RATIO = 0.7;
 export const PASS_MARK = Math.ceil(EXAM_TOTAL_QUESTIONS * PASS_RATIO);
@@ -42,7 +32,27 @@ export const DOMAIN_ORDER: readonly TopicDomain[] = [
   "ALM_IMMUNIZATION",
 ] as const;
 
-/** Questions drawn from each domain: 30 / 5 = 6. */
+/**
+ * Current SOA topic ranges translated to whole-question bounds for a
+ * 30-question sitting. The assembler randomizes inside these bounds while
+ * always producing exactly 30 questions.
+ */
+export const DOMAIN_QUESTION_RANGES: Record<TopicDomain, { min: number; max: number }> = {
+  TIME_VALUE_OF_MONEY: { min: 2, max: 4 },
+  ANNUITIES: { min: 6, max: 9 },
+  LOANS: { min: 5, max: 7 },
+  BONDS: { min: 5, max: 7 },
+  ALM_IMMUNIZATION: { min: 6, max: 9 },
+};
+
+/**
+ * Most of the exam is computational. Qualitative "determine which statement is
+ * true" items are worth a few marks, not half the paper, so a sitting draws at
+ * most this many of them; every other question requires a calculation.
+ */
+export const MAX_CONCEPTUAL_QUESTIONS = 5;
+
+/** Kept for compact custom-practice defaults and backwards-compatible tests. */
 export const QUESTIONS_PER_DOMAIN = EXAM_TOTAL_QUESTIONS / DOMAIN_ORDER.length;
 
 export const DOMAIN_LABELS: Record<TopicDomain, string> = {
@@ -88,10 +98,17 @@ export const DIFFICULTY_LABELS: Record<DifficultyLevel, string> = {
 export const MIN_ADVANCED_STEPS = 3;
 
 /** Difficulties drawn by a standard sitting. Level 1 is opt-in only. */
-export const DEFAULT_DIFFICULTIES: readonly DifficultyLevel[] = [2, 3, 4] as const;
+export const DEFAULT_DIFFICULTIES: readonly DifficultyLevel[] = [1, 2, 3, 4] as const;
 
 /** Every sitting draws at least this many level 3+ items from each domain. */
 export const MIN_ADVANCED_PER_DOMAIN = 2;
+
+/** Topics retained for extra study but excluded from current-syllabus exams. */
+export const LEGACY_TOPICS: readonly SyllabusTopic[] = ["SWAPS", "RATE_DETERMINANTS"] as const;
+
+export function isCurrentSyllabusTemplate(topics: readonly SyllabusTopic[]): boolean {
+  return !topics.some((topic) => LEGACY_TOPICS.includes(topic));
+}
 
 /**
  * Syllabus areas a question can draw on. A level 3+ item must combine at

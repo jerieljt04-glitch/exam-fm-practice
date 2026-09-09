@@ -1,17 +1,23 @@
 import {
   DEFAULT_DIFFICULTIES,
+  DOMAIN_QUESTION_RANGES,
   DOMAIN_ORDER,
   EXAM_TOTAL_QUESTIONS,
-  MIN_ADVANCED_PER_DOMAIN,
+  MAX_CONCEPTUAL_QUESTIONS,
+  isCurrentSyllabusTemplate,
   OPTION_KEYS,
-  QUESTIONS_PER_DOMAIN,
   type DifficultyLevel,
   type OptionKey,
 } from "../exam-config";
-import type { ExamQuestionData, RenderedOption } from "../types/exam";
+import type { ExamQuestionData, RenderedOption, TopicDomain } from "../types/exam";
 import { int, money, num } from "./format";
 import { createRng, type Rng } from "./random";
-import { QUESTION_TEMPLATES, TEMPLATES_BY_DOMAIN, getTemplateById } from "./templates";
+import {
+  QUESTION_TEMPLATES,
+  TEMPLATES_BY_DOMAIN,
+  getTemplateById,
+  isConceptualTemplate,
+} from "./templates";
 import type { AnswerFormat, QuestionTemplateDefinition } from "./templates/types";
 
 export interface GenerateExamOptions {
@@ -28,6 +34,14 @@ export interface GenerateExamOptions {
    * level 1 is drawn only when a caller asks for it explicitly.
    */
   difficulties?: readonly DifficultyLevel[];
+  /** Domains included in a custom practice set. Omitted for a full exam. */
+  domains?: readonly TopicDomain[];
+  /** Allows retired syllabus material such as swaps in an explicit practice set. */
+  includeLegacy?: boolean;
+  /** Restricts generation to prior missed templates for spaced review. */
+  templateIds?: readonly string[];
+  /** Uses the published syllabus ranges instead of an even custom split. */
+  useSyllabusWeights?: boolean;
 }
 
 /** Key under which each question stores the seed that produced its parameters. */
@@ -101,6 +115,41 @@ export class QuestionGenerator {
     const rng: Rng = createRng(seed);
     const generated = template.generate(rng);
 
+    if (generated.kind === "CHOICE") {
+      if (generated.choices.length !== OPTION_KEYS.length) {
+        throw new Error(`${template.id} authored ${generated.choices.length} choices; five are required.`);
+      }
+      const renderedOptions: RenderedOption[] = rng.shuffle(generated.choices).map((choice, index) => ({
+        key: OPTION_KEYS[index] as OptionKey,
+        text: choice.text,
+        isCorrect: choice.isCorrect,
+        distractorType: choice.isCorrect ? "CORRECT" : (choice.type ?? "CALCULATION_DISTRACTOR"),
+        distractorExplanation: choice.explanation,
+      }));
+
+      return {
+        id: `q_${examSessionId}_${questionNumber}`,
+        examSessionId,
+        templateId: template.id,
+        templateTitle: template.title,
+        objective: template.objective,
+        difficulty: template.difficulty,
+        topics: template.topics,
+        steps: template.steps,
+        domain: template.domain,
+        renderedQuestion: generated.questionText,
+        renderedOptions,
+        selectedOption: null,
+        isFlagged: false,
+        confidence: null,
+        timeSpentSeconds: 0,
+        calculatorUsed: false,
+        variables: { ...generated.variables, [SEED_VARIABLE_KEY]: seed },
+        isCorrect: null,
+        solutionSteps: generated.solutionSteps,
+      };
+    }
+
     const candidates: CandidateOption[] = [
       {
         text: formatAnswer(generated.correctValue, generated.format),
@@ -117,19 +166,18 @@ export class QuestionGenerator {
       if (candidates.length >= OPTION_KEYS.length) break;
       if (!isPlausibleDistractor(item.value, generated.correctValue)) continue;
 
-      let value = item.value;
-      let text = formatAnswer(value, generated.format);
+      const value = item.value;
+      const text = formatAnswer(value, generated.format);
 
-      // Nudge a distractor that collides with an option already on the paper.
-      // Five visibly distinct choices are required on every question.
-      let attempt = 0;
-      while ((usedTexts.has(text) || value === generated.correctValue) && attempt < 12) {
-        attempt += 1;
-        const factor = attempt % 2 === 0 ? 1 + 0.035 * attempt : 1 - 0.035 * attempt;
-        value = item.value * factor;
-        text = formatAnswer(value, generated.format);
-      }
-      if (usedTexts.has(text) || !isPlausibleDistractor(value, generated.correctValue)) continue;
+      // A distractor is dropped rather than nudged when it collides. Some
+      // parameter draws are degenerate — a bond priced at par, a symmetric
+      // immunizing straddle, a growth rate exactly half the interest rate —
+      // and there the modelled mistake genuinely produces the right answer.
+      // Shifting the number would leave an option whose value no longer
+      // matches the misconception its explanation describes, so the slot is
+      // surrendered to the generic backstop below instead.
+      if (Math.abs(value - generated.correctValue) < 1e-9) continue;
+      if (usedTexts.has(text)) continue;
 
       usedTexts.add(text);
       candidates.push({
@@ -187,6 +235,9 @@ export class QuestionGenerator {
       renderedOptions,
       selectedOption: null,
       isFlagged: false,
+      confidence: null,
+      timeSpentSeconds: 0,
+      calculatorUsed: false,
       variables: { ...generated.variables, [SEED_VARIABLE_KEY]: seed },
       isCorrect: null,
       solutionSteps: generated.solutionSteps,
@@ -194,8 +245,8 @@ export class QuestionGenerator {
   }
 
   /**
-   * Builds a complete mock exam: 30 questions, six from each of the five
-   * syllabus domains, with no template used twice in the same sitting.
+   * Builds a complete mock exam using the current published syllabus weights,
+   * or a balanced custom practice set when domains/template ids are supplied.
    */
   public generateFullExam(options: GenerateExamOptions): ExamQuestionData[] {
     const {
@@ -203,40 +254,98 @@ export class QuestionGenerator {
       totalQuestions = EXAM_TOTAL_QUESTIONS,
       seed = `${sessionId}-${Date.now()}`,
       difficulties = DEFAULT_DIFFICULTIES,
+      domains = DOMAIN_ORDER,
+      includeLegacy = false,
+      templateIds,
+      useSyllabusWeights = totalQuestions === EXAM_TOTAL_QUESTIONS && !templateIds,
     } = options;
 
     const rng = createRng(seed);
-    const perDomain = Math.floor(totalQuestions / DOMAIN_ORDER.length) || QUESTIONS_PER_DOMAIN;
     const selected: QuestionTemplateDefinition[] = [];
 
-    for (const domain of DOMAIN_ORDER) {
-      const pool = (TEMPLATES_BY_DOMAIN[domain] ?? []).filter((template) =>
-        difficulties.includes(template.difficulty)
+    if (templateIds?.length) {
+      const requested = rng.shuffle(
+        templateIds
+          .map((id) => getTemplateById(id))
+          .filter((template): template is QuestionTemplateDefinition => Boolean(template))
+          .filter((template) => includeLegacy || isCurrentSyllabusTemplate(template.topics))
+          .filter((template) => difficulties.includes(template.difficulty))
       );
-      if (pool.length === 0) continue;
+      if (requested.length === 0) {
+        throw new Error("No eligible mistake-review templates were supplied.");
+      }
+      while (selected.length < totalQuestions) {
+        selected.push(requested[selected.length % requested.length]);
+      }
+    } else {
+      const activeDomains = domains.filter((domain) => DOMAIN_ORDER.includes(domain));
+      if (activeDomains.length === 0) throw new Error("At least one syllabus domain is required.");
 
-      // Seat the advanced quota first, then fill the remainder from whatever is
-      // left, so every domain contributes multi-step synthesis questions rather
-      // than only the intermediate items that happen to shuffle to the front.
-      const advanced = rng.shuffle(pool.filter((template) => template.difficulty >= 3));
-      const quota = Math.min(MIN_ADVANCED_PER_DOMAIN, advanced.length, perDomain);
-      const chosen = advanced.slice(0, quota);
-
-      const remainder = rng.shuffle(pool.filter((template) => !chosen.includes(template)));
-      let cursor = 0;
-      while (chosen.length < perDomain) {
-        // The blueprint invariant guarantees enough distinct templates; the
-        // modulo only guards a caller asking for more than the blueprint size.
-        chosen.push(remainder[cursor % remainder.length]);
-        cursor += 1;
+      const counts = new Map<TopicDomain, number>();
+      if (useSyllabusWeights && totalQuestions === EXAM_TOTAL_QUESTIONS && activeDomains.length === DOMAIN_ORDER.length) {
+        for (const domain of DOMAIN_ORDER) counts.set(domain, DOMAIN_QUESTION_RANGES[domain].min);
+        let remaining = totalQuestions - Array.from(counts.values()).reduce((sum, count) => sum + count, 0);
+        while (remaining > 0) {
+          const eligible = activeDomains.filter(
+            (domain) => (counts.get(domain) ?? 0) < DOMAIN_QUESTION_RANGES[domain].max
+          );
+          const domain = rng.choice(eligible);
+          counts.set(domain, (counts.get(domain) ?? 0) + 1);
+          remaining -= 1;
+        }
+      } else {
+        const shuffledDomains = rng.shuffle(activeDomains);
+        for (const domain of activeDomains) counts.set(domain, Math.floor(totalQuestions / activeDomains.length));
+        for (let index = 0; index < totalQuestions % activeDomains.length; index += 1) {
+          const domain = shuffledDomains[index];
+          counts.set(domain, (counts.get(domain) ?? 0) + 1);
+        }
       }
 
-      selected.push(...chosen.slice(0, perDomain));
-    }
+      // Spread the small qualitative allowance across domains with enough
+      // questions to carry one; everything else is drawn from the numerical
+      // pool, so the paper stays overwhelmingly computational.
+      const conceptualQuota = new Map<TopicDomain, number>();
+      let conceptualBudget = Math.min(MAX_CONCEPTUAL_QUESTIONS, totalQuestions);
+      for (const domain of rng.shuffle(activeDomains)) {
+        if (conceptualBudget <= 0) break;
+        if ((counts.get(domain) ?? 0) < 3) continue;
+        conceptualQuota.set(domain, 1);
+        conceptualBudget -= 1;
+      }
 
-    // Top up if totalQuestions is not divisible by the number of domains.
-    while (selected.length < totalQuestions) {
-      selected.push(rng.choice(this.templates));
+      for (const domain of activeDomains) {
+        const target = counts.get(domain) ?? 0;
+        const pool = (TEMPLATES_BY_DOMAIN[domain] ?? [])
+          .filter((template) => difficulties.includes(template.difficulty))
+          .filter((template) => includeLegacy || isCurrentSyllabusTemplate(template.topics));
+        if (target > 0 && pool.length === 0) {
+          throw new Error(`No eligible templates are available for ${domain}.`);
+        }
+
+        const numericPool = pool.filter((template) => !isConceptualTemplate(template));
+        const conceptualPool = rng.shuffle(pool.filter((template) => isConceptualTemplate(template)));
+        const fillPool = numericPool.length > 0 ? numericPool : pool;
+
+        const chosen: QuestionTemplateDefinition[] = conceptualPool.slice(
+          0,
+          Math.min(conceptualQuota.get(domain) ?? 0, Math.max(0, target - 1))
+        );
+
+        if (useSyllabusWeights) {
+          const advanced = rng.shuffle(fillPool.filter((template) => template.difficulty >= 3));
+          if (advanced.length > 0 && target >= 4) chosen.push(advanced[0]);
+          if (advanced.length > 1 && target >= 8) chosen.push(advanced[1]);
+        }
+
+        const remainder = rng.shuffle(fillPool.filter((template) => !chosen.includes(template)));
+        let cursor = 0;
+        while (chosen.length < target) {
+          chosen.push(remainder[cursor % remainder.length] ?? rng.choice(fillPool));
+          cursor += 1;
+        }
+        selected.push(...chosen.slice(0, target));
+      }
     }
 
     return rng

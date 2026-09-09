@@ -2,9 +2,9 @@ import type { TopicDomain } from "../../types/exam";
 import {
   DEFAULT_DIFFICULTIES,
   DOMAIN_ORDER,
-  MIN_ADVANCED_PER_DOMAIN,
   MIN_ADVANCED_STEPS,
-  QUESTIONS_PER_DOMAIN,
+  DOMAIN_QUESTION_RANGES,
+  isCurrentSyllabusTemplate,
 } from "../../exam-config";
 import { ALM_TEMPLATES } from "./alm-immunization";
 import { ANNUITY_TEMPLATES } from "./annuities";
@@ -12,9 +12,23 @@ import { BOND_TEMPLATES } from "./bonds";
 import { LOAN_TEMPLATES } from "./loans";
 import { MULTI_STEP_TEMPLATES } from "./multi-step";
 import { TIME_VALUE_OF_MONEY_TEMPLATES } from "./time-value-of-money";
+import { CONCEPTUAL_TEMPLATES } from "./conceptual";
+import { EXPANDED_CONCEPTUAL_TEMPLATES } from "./conceptual-expanded";
 import type { QuestionTemplateDefinition } from "./types";
 
 export * from "./types";
+
+/**
+ * Qualitative items authored with fixed choices rather than a computed answer.
+ * The exam caps how many of these a sitting may draw.
+ */
+const CONCEPTUAL_TEMPLATE_IDS: ReadonlySet<string> = new Set(
+  [...CONCEPTUAL_TEMPLATES, ...EXPANDED_CONCEPTUAL_TEMPLATES].map((template) => template.id)
+);
+
+export function isConceptualTemplate(template: { id: string }): boolean {
+  return CONCEPTUAL_TEMPLATE_IDS.has(template.id);
+}
 
 /**
  * The full template library. Every template parameterizes its own numbers, so
@@ -28,6 +42,8 @@ export const QUESTION_TEMPLATES: QuestionTemplateDefinition[] = [
   ...BOND_TEMPLATES,
   ...ALM_TEMPLATES,
   ...MULTI_STEP_TEMPLATES,
+  ...CONCEPTUAL_TEMPLATES,
+  ...EXPANDED_CONCEPTUAL_TEMPLATES,
 ];
 
 export const TEMPLATES_BY_DOMAIN: Record<TopicDomain, QuestionTemplateDefinition[]> =
@@ -81,16 +97,10 @@ function assertBlueprintCoverage(): void {
     const eligible = pool.filter((template) =>
       DEFAULT_DIFFICULTIES.includes(template.difficulty)
     );
-    if (eligible.length < QUESTIONS_PER_DOMAIN) {
+    const current = eligible.filter((template) => isCurrentSyllabusTemplate(template.topics));
+    if (current.length < DOMAIN_QUESTION_RANGES[domain].max) {
       throw new Error(
-        `Domain ${domain} offers ${eligible.length} templates at the default difficulties but the blueprint draws ${QUESTIONS_PER_DOMAIN}.`
-      );
-    }
-
-    const advanced = eligible.filter((template) => template.difficulty >= 3);
-    if (advanced.length < MIN_ADVANCED_PER_DOMAIN) {
-      throw new Error(
-        `Domain ${domain} offers ${advanced.length} level 3+ templates but every sitting must draw ${MIN_ADVANCED_PER_DOMAIN}.`
+        `Domain ${domain} offers ${current.length} current-syllabus templates but the blueprint may draw ${DOMAIN_QUESTION_RANGES[domain].max}.`
       );
     }
   }

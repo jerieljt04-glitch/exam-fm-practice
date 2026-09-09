@@ -1,4 +1,5 @@
 import { ActuarialMath } from "../financial-math";
+import { rateAwayFrom } from "../random";
 import { mathInt, mathMoney, mathNum, money, moneyInt, ordinal, pct, rate } from "../format";
 import { cast, effectiveRate, nominalRate } from "../style";
 import { distractor, type QuestionTemplateDefinition } from "./types";
@@ -21,7 +22,7 @@ export const BOND_TEMPLATES: QuestionTemplateDefinition[] = [
       const par = rng.choice([1000, 10000]);
       const years = rng.choice([10, 15, 20]);
       const couponNominal = rng.float(0.05, 0.09, 3);
-      const yieldNominal = rng.float(0.04, 0.08, 3);
+      const yieldNominal = rateAwayFrom(rng, 0.04, 0.08, couponNominal, 0.01);
       const m = 2;
 
       const periods = years * m;
@@ -243,7 +244,7 @@ Pricing to maturity would give ${mathMoney(priceIfHeld)}; paying that much and t
       const par = 1000;
       const n = rng.int(6, 15);
       const r = rng.float(0.05, 0.09, 3);
-      const trueYield = rng.float(0.035, 0.095, 4);
+      const trueYield = rateAwayFrom(rng, 0.035, 0.095, r, 0.01, 4);
 
       const coupon = par * r;
       // Quote the bond in whole dollars and solve the yield from that exact
@@ -313,7 +314,7 @@ $$P(${(solvedYield * 100).toFixed(2)}\\%) = ${mathMoney(ActuarialMath.bondPrice(
       const par = 1000;
       const years = rng.choice([8, 10, 12]);
       const couponNominal = rng.float(0.05, 0.09, 3);
-      const yieldNominal = rng.float(0.04, 0.08, 3);
+      const yieldNominal = rateAwayFrom(rng, 0.04, 0.08, couponNominal, 0.01);
       const m = 2;
 
       const n = years * m;

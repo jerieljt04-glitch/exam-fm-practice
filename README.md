@@ -119,17 +119,18 @@ Defined once in [`lib/exam-config.ts`](lib/exam-config.ts) and read by every lay
 - **30** multiple-choice questions, **five** options each (A–E), listed in ascending
   numeric order the way the real CBT presents them.
 - **150 minutes** (9000 seconds) of active time.
-- **Six questions from each of the five domains**, drawn from six *distinct* templates,
-  so no question structure repeats within a sitting.
-- **At least two level 3+ items per domain**, so every sitting is at least a third
-  multi-step synthesis. A typical paper runs 15 intermediate / 11 advanced / 4 elite.
+- **Current SOA syllabus ranges** translated to a 30-question sitting: Time Value of Money
+  2–4, Annuities 6–9, Loans 5–7, Bonds 5–7, and Asset-Liability Management 6–9.
+- Distinct templates within a sitting, plus a mix of conceptual, direct-calculation, and
+  multi-step synthesis items. Retired swap and interest-rate-determinant topics are excluded
+  from Exam Mode and available only through the optional legacy Practice Mode filter.
 - A **70% (21/30)** benchmark used only for the report's study signal.
 
 ### Difficulty taxonomy
 
 | Level | Name | What it demands |
 | --- | --- | --- |
-| 1 | Basic | A direct one- or two-step evaluation. **Excluded from generated exams** unless a caller passes `difficulties` explicitly. |
+| 1 | Basic | A direct evaluation or conceptual recognition item. Included in the standard difficulty mix. |
 | 2 | Intermediate | Two cash flow streams equated across one structural change. |
 | 3 | Advanced | A chain of **at least three interdependent sub-problems** spanning **two or more** syllabus areas. |
 | 4 | Elite synthesis | Multi-period state tracking: rate resets, refinancing, seasoned swaps, portfolio immunization of a multi-payment liability. |
@@ -142,13 +143,14 @@ areas, and the test suite fails if its rendered solution shows fewer than three 
 
 | Domain | Templates | Covers |
 | --- | --- | --- |
-| Time Value of Money | 10 | force of interest, rate equivalence, equations of value, piecewise forces feeding a loan, dollar- vs time-weighted yields, inflation and real returns |
-| Annuities & Cash Flows | 10 | level, due, deferred, increasing, continuous, growing perpetuities, increasing-then-level streams, pricing off a spot curve, reinvestment yields |
-| Loans & Amortization | 9 | level payments, balances, principal/interest split, sinking funds, mid-term switch to a sinking fund, drop payments, rate-reset refinancing |
-| Bonds | 8 | pricing, book value, premium write-down, interest earned, yield to maturity, callable bonds, spot-curve pricing into duration, a fund purchase into a guaranteed yield |
-| Asset-Liability Management | 11 | Macaulay and modified duration, convexity, Redington and full immunization, annuity-liability immunization, second-order price approximation, deferred swap rates, seasoned swap valuation, swaps on an amortizing notional |
+| Time Value of Money | 20 | force of interest, rate equivalence, equations of value, money- and time-weighted yields, inflation, varying forces, IRR uniqueness and yield bracketing |
+| Annuities & Cash Flows | 21 | level, due, deferred, increasing, decreasing, continuous, geometric, perpetual and reinvested payment streams |
+| Loans & Amortization | 20 | level payments, balances, principal/interest split, sinking funds, negative amortization, drop/balloon payments, refinancing and reamortization |
+| Bonds | 19 | pricing, book value, clean/dirty price, premium and discount patterns, callable bonds, spot/forward rates, yield and duration |
+| Asset-Liability Management | 22 | Macaulay and modified duration, convexity, price sensitivity, Redington, cash-flow matching, full immunization and horizon risk |
 
-Forty-seven templates in total, of which nineteen are level 3+.
+There are **102 templates in total**: 47 parameterized numerical and multi-step templates plus
+55 conceptual templates with authored distractors and explanations. Nineteen are level 3+.
 
 ### Relationship to the SOA sample questions
 
@@ -159,8 +161,9 @@ candidate actually meets, closing the gaps (determinants of interest rates, rein
 second-order price approximation, deferred and amortizing swaps); and to fix how questions are
 written.
 
-Every question this platform asks is generated with fresh parameters each sitting, which is what
-keeps repeated practice useful once the sample set has been memorised.
+Numerical questions receive fresh parameters each sitting. Conceptual questions draw from the
+larger authored pool and their five options are shuffled, which keeps repeated practice varied
+without weakening the precision of the statements.
 
 ### House style
 
@@ -340,9 +343,20 @@ on a paper you have walked away from:
   button cannot resurrect a stale paper either.
 - The application icon always opens the landing page, never an exam.
 
-Every sitting therefore draws a fresh set of 30 questions. Two sittings share
-question *types* — 30 drawn from 47 templates — but never the same numbers,
-names, answer or distractors.
+Every sitting therefore draws a fresh set of 30 questions from 102 templates. Numerical items
+receive new numbers, names, answers and distractors; conceptual items are sampled from the larger
+pool and their answer order changes.
+
+## Practice, history, and analytics
+
+- Practice Mode supports 5, 10, 15, or 30 questions, domain and difficulty filters, timed or
+  untimed work, immediate feedback, worked solutions, and an optional formula sheet.
+- Completed attempts and template-level mastery are stored in the browser. Review Due uses spaced
+  intervals, while Retry Mistakes builds a targeted quiz from the most recent misses.
+- Each question records active time, confidence (Sure, Unsure, or Guess), and an optional
+  self-reported **Calculator used** mark. The report compares calculator/no-calculator accuracy and
+  average pace and highlights overconfident errors and lucky guesses. Physical calculator use is
+  necessarily self-reported because a browser cannot observe its keys.
 
 ## Timing and pause/resume
 

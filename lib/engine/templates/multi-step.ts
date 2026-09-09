@@ -151,7 +151,15 @@ $$A(${m})(1 + ${i})^{${p}} - R \\cdot s_{\\overline{${p}}|${i}} = ${mathMoney(re
       const fund = institution(rng);
       const opening = rng.int(20, 60) * 1000;
       const deposit = rng.int(5, 18) * 1000;
-      const withdrawal = rng.int(4, 14) * 1000;
+
+      // The unweighted exposure A + C - W coincides with the correctly weighted
+      // A + 0.75C - 0.25W exactly when C = 3W, which would make that distractor
+      // the right answer. Keep the two denominators clearly apart.
+      let withdrawal = rng.int(4, 14) * 1000;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (Math.abs(0.25 * deposit - 0.75 * withdrawal) >= 750) break;
+        withdrawal = rng.int(4, 14) * 1000;
+      }
 
       // Deposit on 1 April (t = 1/4), withdrawal on 1 October (t = 3/4).
       const depositTime = 0.25;

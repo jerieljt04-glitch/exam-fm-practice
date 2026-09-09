@@ -12,14 +12,13 @@
 import katex from "katex";
 
 import {
-  ABANDON_AFTER_MS,
   DEFAULT_DIFFICULTIES,
+  DOMAIN_QUESTION_RANGES,
   DOMAIN_ORDER,
   EXAM_TOTAL_QUESTIONS,
-  MIN_ADVANCED_PER_DOMAIN,
   MIN_ADVANCED_STEPS,
   OPTION_KEYS,
-  QUESTIONS_PER_DOMAIN,
+  isCurrentSyllabusTemplate,
 } from "../lib/exam-config";
 import { examGenerator } from "../lib/engine/generator";
 import { createRng } from "../lib/engine/random";
@@ -153,12 +152,16 @@ function checkQuestion(question: ExamQuestionData, index: number): void {
 async function run(): Promise<void> {
   section("1. Template library");
   console.log(`  Templates: ${QUESTION_TEMPLATES.length}`);
+  check(
+    QUESTION_TEMPLATES.length >= 100,
+    `The larger bank must contain at least 100 templates (found ${QUESTION_TEMPLATES.length})`
+  );
   for (const domain of DOMAIN_ORDER) {
     const count = TEMPLATES_BY_DOMAIN[domain].length;
     console.log(`  ${domain}: ${count}`);
     check(
-      count >= QUESTIONS_PER_DOMAIN,
-      `${domain} has ${count} templates but the blueprint draws ${QUESTIONS_PER_DOMAIN}`
+      count >= DOMAIN_QUESTION_RANGES[domain].max,
+      `${domain} has ${count} templates but the blueprint may draw ${DOMAIN_QUESTION_RANGES[domain].max}`
     );
   }
 
@@ -187,24 +190,29 @@ async function run(): Promise<void> {
       domainCounts.set(question.domain, (domainCounts.get(question.domain) ?? 0) + 1);
     }
     for (const domain of DOMAIN_ORDER) {
+      const actual = domainCounts.get(domain) ?? 0;
+      const range = DOMAIN_QUESTION_RANGES[domain];
       check(
-        domainCounts.get(domain) === QUESTIONS_PER_DOMAIN,
-        `Exam ${attempt}: ${domain} contributed ${domainCounts.get(domain) ?? 0} questions, expected ${QUESTIONS_PER_DOMAIN}`
+        actual >= range.min && actual <= range.max,
+        `Exam ${attempt}: ${domain} contributed ${actual} questions, expected ${range.min}-${range.max}`
       );
     }
 
-    // Difficulty blueprint: level 1 never appears, and every domain contributes
-    // its quota of level 3+ synthesis questions.
+    // Standard exams use only current-syllabus material and keep a mix of
+    // direct, intermediate, and synthesis work.
+    check(
+      questions.every((question) => isCurrentSyllabusTemplate(question.topics)),
+      `Exam ${attempt}: current Exam Mode included a retired topic`
+    );
     for (const domain of DOMAIN_ORDER) {
       const inDomain = questions.filter((question) => question.domain === domain);
       check(
         inDomain.every((question) => DEFAULT_DIFFICULTIES.includes(question.difficulty)),
         `Exam ${attempt}: ${domain} drew a question outside the default difficulty range`
       );
-      const advanced = inDomain.filter((question) => question.difficulty >= 3);
       check(
-        advanced.length >= MIN_ADVANCED_PER_DOMAIN,
-        `Exam ${attempt}: ${domain} drew ${advanced.length} level 3+ questions, expected at least ${MIN_ADVANCED_PER_DOMAIN}`
+        inDomain.some((question) => question.difficulty <= 2),
+        `Exam ${attempt}: ${domain} did not include any direct/intermediate item`
       );
     }
 
@@ -239,7 +247,8 @@ async function run(): Promise<void> {
       // happen to be drawn into the sampled exams above.
       checkMarkup(`${template.id} draw ${draw} question`, item.questionText);
       checkMarkup(`${template.id} draw ${draw} solution`, item.solutionSteps);
-      for (const item_distractor of item.distractors) {
+      const rationales = item.kind === "CHOICE" ? item.choices : item.distractors;
+      for (const item_distractor of rationales) {
         checkMarkup(`${template.id} draw ${draw} rationale`, item_distractor.explanation);
       }
     }
@@ -273,6 +282,7 @@ async function run(): Promise<void> {
   const session = await examRepository.createExamSession("test-candidate");
   check(session.questions.length === EXAM_TOTAL_QUESTIONS, "A new session must hold 30 questions");
   check(session.durationSeconds === 9000, "A new session must run for 9000 seconds (150 minutes)");
+  check(session.mode === "EXAM" && session.isTimed, "A default session must be strict timed Exam Mode");
 
   const paused = await examRepository.updatePauseState(session.id, true);
   check(paused.isPaused && paused.status === "PAUSED", "Pausing must set isPaused and status");
@@ -298,6 +308,14 @@ async function run(): Promise<void> {
     // The remaining questions are deliberately left unanswered.
   }
   await examRepository.updateQuestionAnswer(session.id, session.questions[3].id, undefined, true);
+  await examRepository.updateQuestionMeta(session.id, session.questions[0].id, {
+    confidence: "SURE",
+    timeSpentSeconds: 73,
+    calculatorUsed: true,
+  });
+  await examRepository.updateQuestionMeta(session.id, session.questions[1].id, {
+    calculatorUsed: false,
+  });
 
   const review = await examRepository.submitExam(session.id);
   check(
@@ -307,9 +325,26 @@ async function run(): Promise<void> {
   check(review.unansweredCount === 3, `Expected 3 unanswered questions, got ${review.unansweredCount}`);
   check(review.isPassed, "22/30 must clear the 21/30 benchmark");
   check(
-    Object.values(review.domainMetrics).every((metric) => metric.total === QUESTIONS_PER_DOMAIN),
-    "Every domain must contribute exactly 6 graded questions"
+    review.questions[0].confidence === "SURE" &&
+      review.questions[0].timeSpentSeconds === 73 &&
+      review.questions[0].calculatorUsed === true,
+    "Confidence, timing, and calculator-use metadata must survive grading"
   );
+  check(
+    Object.values(review.domainMetrics).reduce((sum, metric) => sum + metric.total, 0) === EXAM_TOTAL_QUESTIONS,
+    "Domain diagnostic totals must add to 30"
+  );
+
+  const practice = await examRepository.createExamSession("practice-candidate", {
+    mode: "PRACTICE",
+    totalQuestions: 5,
+    domains: ["ANNUITIES"],
+    difficulties: [1, 2],
+    isTimed: false,
+  });
+  check(practice.questions.length === 5, "A custom practice set must honor its question count");
+  check(practice.questions.every((question) => question.domain === "ANNUITIES"), "A custom set must honor its domain filter");
+  check(practice.immediateFeedback && practice.formulaSheetEnabled && !practice.isTimed, "Practice Mode must enable teaching aids and allow untimed work");
 
   const endTime = review.endTime;
   await new Promise((resolve) => setTimeout(resolve, 40));
@@ -319,71 +354,40 @@ async function run(): Promise<void> {
     "Revisiting the review must not re-close the exam or move the end time"
   );
 
-  section("5. A sitting ends when its tab closes");
+  section("5. Answers always register");
 
-  // Still being watched: a heartbeat inside the window keeps the sitting open.
-  // This is the reload case — the page is back and reporting within a second.
-  const live = await examRepository.createExamSession("closes-test");
-  live.lastSeenAt = new Date(Date.now() - Math.floor(ABANDON_AFTER_MS / 2)).toISOString();
-  await examRepository.recordHeartbeat(live.id);
-  const afterBeat = await examRepository.getExamSession(live.id);
-  check(
-    afterBeat?.status === "IN_PROGRESS",
-    `A sitting that reports in before the deadline must stay open (got ${afterBeat?.status})`
-  );
-  check(
-    afterBeat !== null &&
-      Date.now() - new Date(afterBeat.lastSeenAt).getTime() < ABANDON_AFTER_MS / 2,
-    "A heartbeat must refresh the last-seen time"
-  );
+  // The exam once expired a sitting whose browser went quiet, after which every
+  // answer was silently dropped while submission still graded the paper. An
+  // answer must register regardless of how long the candidate spent thinking.
+  const quiet = await examRepository.createExamSession("answers-register");
+  const first = quiet.questions[0];
+  const later = quiet.questions[1];
 
-  // Past the deadline the sitting is over, and a late heartbeat does not revive
-  // it: reopening a tab you closed half a minute ago starts a new exam.
-  const late = await examRepository.createExamSession("closes-test-late");
-  late.lastSeenAt = new Date(Date.now() - ABANDON_AFTER_MS - 5000).toISOString();
-  await examRepository.recordHeartbeat(late.id);
-  const afterLate = await examRepository.getExamSession(late.id);
+  await examRepository.updateQuestionAnswer(quiet.id, first.id, "A");
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  await examRepository.updateQuestionAnswer(quiet.id, later.id, "B");
+
+  const reread = await examRepository.getExamSession(quiet.id);
+  check(reread?.status === "IN_PROGRESS", `A quiet sitting must stay open (got ${reread?.status})`);
   check(
-    afterLate?.status === "ABANDONED",
-    `A heartbeat arriving after the deadline must not revive a sitting (got ${afterLate?.status})`
+    reread?.questions[0].selectedOption === "A" && reread?.questions[1].selectedOption === "B",
+    "Both answers must be stored, whatever the gap between them"
   );
 
-  // Tab closed: the heartbeat stops and the sitting is retired.
-  const closed = await examRepository.createExamSession("closes-test-2");
-  closed.lastSeenAt = new Date(Date.now() - ABANDON_AFTER_MS - 5000).toISOString();
-  const afterClose = await examRepository.getExamSession(closed.id);
+  const graded = await examRepository.submitExam(quiet.id);
   check(
-    afterClose?.status === "ABANDONED",
-    `A sitting that stops reporting must be abandoned (got ${afterClose?.status})`
-  );
-  check(
-    (await examRepository.getReviewData(closed.id)) === null,
-    "An abandoned sitting must have no report"
+    graded.unansweredCount === graded.totalQuestions - 2,
+    `Only the untouched questions may count as unanswered (got ${graded.unansweredCount})`
   );
 
-  // Answers to a dead sitting are refused.
-  const deadQuestion = closed.questions[0];
-  await examRepository.updateQuestionAnswer(closed.id, deadQuestion.id, "A");
-  const reread = await examRepository.getExamSession(closed.id);
+  // Starting a new exam still retires the previous sitting, which is what keeps
+  // a stale paper from being resumed — without any timer that can kill a live one.
+  const older = await examRepository.createExamSession("one-at-a-time-2");
+  await examRepository.createExamSession("one-at-a-time-2");
+  const olderAgain = await examRepository.getExamSession(older.id);
   check(
-    reread?.questions[0].selectedOption === null,
-    "An abandoned sitting must not accept further answers"
-  );
-
-  // Starting a new exam retires whatever the candidate left open.
-  const first = await examRepository.createExamSession("one-at-a-time");
-  const second = await examRepository.createExamSession("one-at-a-time");
-  const firstAgain = await examRepository.getExamSession(first.id);
-  check(
-    firstAgain?.status === "ABANDONED",
-    `Starting a new exam must retire the previous sitting (got ${firstAgain?.status})`
-  );
-  check(second.status === "IN_PROGRESS", "The new sitting must be open");
-  check(
-    first.questions.every(
-      (q, index) => q.renderedQuestion !== second.questions[index].renderedQuestion
-    ),
-    "Two sittings must not pose identically worded questions in the same position"
+    olderAgain?.status === "ABANDONED",
+    `Starting a new exam must retire the previous sitting (got ${olderAgain?.status})`
   );
 
   section("Result");

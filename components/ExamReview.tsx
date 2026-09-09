@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -9,12 +9,14 @@ import {
   Bookmark,
   CheckCircle2,
   Clock,
+  Calculator,
   MinusCircle,
   RotateCcw,
   XCircle,
 } from "lucide-react";
 
 import { MathRenderer } from "./MathRenderer";
+import { QuestionStudyAids } from "./QuestionStudyAids";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -26,12 +28,12 @@ import {
   DIFFICULTY_LABELS,
   DOMAIN_LABELS,
   DOMAIN_ORDER,
-  PASS_MARK,
   PASS_RATIO,
   TOPIC_LABELS,
 } from "@/lib/exam-config";
-import type { ExamQuestionData, ExamReviewData, ProficiencyStatus } from "@/lib/types/exam";
+import type { DomainMetric, ExamQuestionData, ExamReviewData, ProficiencyStatus } from "@/lib/types/exam";
 import { cn } from "@/lib/utils";
+import { recordReview } from "@/lib/study-history";
 
 interface ExamReviewProps {
   reviewData: ExamReviewData;
@@ -88,6 +90,10 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
   const [filter, setFilter] = useState<QuestionFilter>("ALL");
   const [selectedDomain, setSelectedDomain] = useState<string>("ALL");
 
+  useEffect(() => {
+    recordReview(window.localStorage, reviewData);
+  }, [reviewData]);
+
   const questionNumbers = useMemo(() => {
     const map = new Map<string, number>();
     questions.forEach((question, index) => map.set(question.id, index + 1));
@@ -95,6 +101,7 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
   }, [questions]);
 
   const incorrectCount = totalQuestions - correctCount;
+  const benchmarkMark = Math.ceil(totalQuestions * PASS_RATIO);
   const flaggedCount = useMemo(
     () => questions.filter((question) => question.isFlagged).length,
     [questions]
@@ -118,14 +125,37 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
     return firstIncorrect ? [firstIncorrect.id] : [];
   }, [filteredQuestions]);
 
-  const weakestDomain = useMemo(
-    () =>
-      DOMAIN_ORDER.map((domain) => domainMetrics[domain]).reduce(
-        (weakest, metric) => (metric && metric.percentage < weakest.percentage ? metric : weakest),
-        domainMetrics[DOMAIN_ORDER[0]]
-      ),
+  const activeDomains = useMemo(
+    () => DOMAIN_ORDER.filter((domain) => (domainMetrics[domain]?.total ?? 0) > 0),
     [domainMetrics]
   );
+  const weakestDomain = useMemo(
+    () => activeDomains.map((domain) => domainMetrics[domain]).reduce(
+      (weakest, metric) => (!weakest || metric.percentage < weakest.percentage ? metric : weakest),
+      undefined as DomainMetric | undefined
+    ),
+    [activeDomains, domainMetrics]
+  );
+  const calculatorAnalytics = useMemo(() => {
+    const summarize = (items: ExamQuestionData[]) => ({
+      count: items.length,
+      accuracy:
+        items.length > 0
+          ? Math.round((items.filter((question) => question.isCorrect).length / items.length) * 100)
+          : null,
+      averageSeconds:
+        items.length > 0
+          ? Math.round(
+              items.reduce((sum, question) => sum + (question.timeSpentSeconds ?? 0), 0) /
+                items.length
+            )
+          : null,
+    });
+    return {
+      used: summarize(questions.filter((question) => question.calculatorUsed)),
+      notUsed: summarize(questions.filter((question) => !question.calculatorUsed)),
+    };
+  }, [questions]);
 
   return (
     <div className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
@@ -142,7 +172,7 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
             <div className="space-y-2">
               <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider">
-                Practice exam report
+                {reviewData.mode === "EXAM" ? "Mock exam report" : "Practice set report"}
               </span>
               <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
                 {isPassed
@@ -150,7 +180,7 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
                   : "Below the practice benchmark"}
               </h1>
               <p className="max-w-xl text-sm text-slate-300">
-                This platform marks {PASS_MARK} of {totalQuestions} correct ({Math.round(PASS_RATIO * 100)}%)
+                This platform marks {benchmarkMark} of {totalQuestions} correct ({Math.round(PASS_RATIO * 100)}%)
                 as its benchmark. The SOA does not publish a fixed pass mark for Exam FM, so treat
                 this as a study signal rather than a prediction.
               </p>
@@ -210,6 +240,51 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
           </div>
         </section>
 
+        {/* ================= Calculator analytics ================= */}
+        <Card className="p-6">
+          <div className="mb-4 flex items-start gap-3">
+            <span className="rounded-lg bg-primary/10 p-2 text-primary">
+              <Calculator className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-bold">Calculator analytics</h2>
+              <p className="text-xs text-muted-foreground">
+                Based on the calculator-use marks you recorded while answering.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              { label: "Calculator used", metric: calculatorAnalytics.used },
+              { label: "No calculator marked", metric: calculatorAnalytics.notUsed },
+            ].map(({ label, metric }) => (
+              <div key={label} className="rounded-xl border bg-muted/30 p-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  {label} · {metric.count} question{metric.count === 1 ? "" : "s"}
+                </div>
+                <div className="mt-2 flex items-baseline gap-5">
+                  <div>
+                    <span className="font-mono text-2xl font-black">
+                      {metric.accuracy === null ? "—" : `${metric.accuracy}%`}
+                    </span>
+                    <span className="ml-1 text-xs text-muted-foreground">accuracy</span>
+                  </div>
+                  <div>
+                    <span className="font-mono text-lg font-bold">
+                      {metric.averageSeconds === null ? "—" : formatDuration(metric.averageSeconds)}
+                    </span>
+                    <span className="ml-1 text-xs text-muted-foreground">avg.</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+            This is self-reported because the app cannot detect keystrokes on a physical calculator.
+            Use the comparison to spot problems where calculator setup is slowing you down or causing errors.
+          </p>
+        </Card>
+
         {/* ================= Domain diagnostics ================= */}
         <Card className="p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -228,7 +303,7 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5">
-            {DOMAIN_ORDER.map((domain) => {
+            {activeDomains.map((domain) => {
               const metric = domainMetrics[domain];
               if (!metric) return null;
               const styles = STATUS_STYLES[metric.status];
@@ -489,6 +564,50 @@ function QuestionReviewItem({
               </>
             )}
             <MathRenderer content={question.solutionSteps} className="text-sm leading-relaxed" />
+          </section>
+
+          <QuestionStudyAids question={question} />
+
+          <section className="grid gap-3 rounded-xl border bg-muted/30 p-4 sm:grid-cols-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Time on question
+              </div>
+              <div className="mt-1 font-mono text-sm font-bold">
+                {formatDuration(question.timeSpentSeconds ?? 0)}
+                {(question.timeSpentSeconds ?? 0) > 300 && (
+                  <span className="ml-2 font-sans text-xs font-normal text-warning">Above 5-minute pace</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Confidence calibration
+              </div>
+              <div className="mt-1 text-sm font-bold">
+                {question.confidence === "SURE"
+                  ? "Sure"
+                  : question.confidence === "UNSURE"
+                    ? "Unsure"
+                    : question.confidence === "GUESS"
+                      ? "Guess"
+                      : "Not recorded"}
+                {question.confidence === "SURE" && !question.isCorrect && (
+                  <span className="ml-2 text-xs font-normal text-warning">Priority misconception</span>
+                )}
+                {question.confidence === "GUESS" && question.isCorrect && (
+                  <span className="ml-2 text-xs font-normal text-primary">Review despite correct answer</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Calculator use
+              </div>
+              <div className="mt-1 text-sm font-bold">
+                {question.calculatorUsed ? "Used" : "Not marked"}
+              </div>
+            </div>
           </section>
         </AccordionContent>
       </AccordionItem>

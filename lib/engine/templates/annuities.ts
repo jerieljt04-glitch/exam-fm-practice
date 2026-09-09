@@ -1,4 +1,5 @@
 import { ActuarialMath } from "../financial-math";
+import { rateAwayFrom } from "../random";
 import { mathInt, mathMoney, moneyInt, pct, rate } from "../format";
 import { cast, effectiveRate } from "../style";
 import { distractor, type QuestionTemplateDefinition } from "./types";
@@ -154,7 +155,10 @@ $$PV = ${mathInt(base)} \\times ${increasingFactor.toFixed(4)} = ${mathMoney(cor
       const [buyer] = cast(rng);
       const firstPayment = rng.int(1, 5) * 1000;
       const g = rng.float(0.02, 0.035, 3);
-      const i = Number((g + rng.float(0.02, 0.04, 3)).toFixed(4));
+      // P/g coincides with P/(i-g) when the spread equals g, which would make
+      // the "divided by the growth rate" distractor the correct answer.
+      const spread = rateAwayFrom(rng, 0.02, 0.04, g, 0.004);
+      const i = Number((g + spread).toFixed(4));
 
       const correctValue = firstPayment / (i - g);
 

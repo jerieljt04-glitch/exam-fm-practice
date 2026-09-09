@@ -1,5 +1,4 @@
 import {
-  ABANDON_AFTER_MS,
   DOMAIN_LABELS,
   DOMAIN_ORDER,
   type DifficultyLevel,
@@ -16,8 +15,10 @@ import { prisma } from "./prisma";
 import type {
   DomainMetric,
   ExamQuestionData,
+  ExamMode,
   ExamReviewData,
   ExamSessionData,
+  ConfidenceLevel,
   TopicDomain,
 } from "./types/exam";
 
@@ -38,6 +39,24 @@ declare global {
 
 const localStore: Map<string, ExamSessionData> =
   globalThis.__examStore ?? (globalThis.__examStore = new Map<string, ExamSessionData>());
+
+const CONFIDENCE_VARIABLE_KEY = "_confidence";
+const TIME_SPENT_VARIABLE_KEY = "_timeSpentSeconds";
+const CALCULATOR_USED_VARIABLE_KEY = "_calculatorUsed";
+
+function parseConfidence(value: unknown): ConfidenceLevel | null {
+  return value === "SURE" || value === "UNSURE" || value === "GUESS" ? value : null;
+}
+
+export interface CreateExamSessionOptions {
+  mode?: ExamMode;
+  totalQuestions?: number;
+  domains?: TopicDomain[];
+  difficulties?: DifficultyLevel[];
+  isTimed?: boolean;
+  includeLegacy?: boolean;
+  templateIds?: string[];
+}
 
 /**
  * Circuit breaker around PostgreSQL.
@@ -83,17 +102,6 @@ async function tryPrisma<T>(fn: () => Promise<T>, fallback: () => T | Promise<T>
     }
     return fallback();
   }
-}
-
-/**
- * A sitting is abandoned once the browser stops reporting in. Closing the tab
- * ends the exam; a reload does not, because the page resumes its heartbeat
- * within a second or two.
- */
-function isAbandoned(session: ExamSessionData, now: number = Date.now()): boolean {
-  if (session.status === "COMPLETED" || session.status === "ABANDONED") return false;
-  const lastSeen = new Date(session.lastSeenAt ?? session.startTime).getTime();
-  return now - lastSeen > ABANDON_AFTER_MS;
 }
 
 function seedOf(variables: unknown): string | null {
@@ -179,11 +187,25 @@ export const examRepository = {
     );
   },
 
-  async createExamSession(userId: string = "candidate-1"): Promise<ExamSessionData> {
+  async createExamSession(
+    userId: string = "candidate-1",
+    options: CreateExamSessionOptions = {}
+  ): Promise<ExamSessionData> {
+    const mode = options.mode ?? "EXAM";
+    const totalQuestions = mode === "EXAM"
+      ? EXAM_TOTAL_QUESTIONS
+      : Math.max(1, Math.min(30, options.totalQuestions ?? 10));
+    const isTimed = mode === "EXAM" ? true : (options.isTimed ?? false);
+    const includeLegacy = mode !== "EXAM" && Boolean(options.includeLegacy);
     const sessionId = `exam_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const questions = examGenerator.generateFullExam({
       sessionId,
-      totalQuestions: EXAM_TOTAL_QUESTIONS,
+      totalQuestions,
+      difficulties: options.difficulties,
+      domains: options.domains,
+      includeLegacy,
+      templateIds: options.templateIds,
+      useSyllabusWeights: mode === "EXAM",
     });
 
     const session: ExamSessionData = {
@@ -195,7 +217,12 @@ export const examRepository = {
       isPaused: false,
       lastPausedAt: null,
       lastSeenAt: new Date().toISOString(),
-      durationSeconds: EXAM_DURATION_SECONDS,
+      durationSeconds: mode === "EXAM" ? EXAM_DURATION_SECONDS : totalQuestions * 5 * 60,
+      mode,
+      isTimed,
+      immediateFeedback: mode !== "EXAM",
+      formulaSheetEnabled: mode !== "EXAM",
+      includeLegacy,
       status: "IN_PROGRESS",
       questions,
     };
@@ -225,7 +252,7 @@ export const examRepository = {
             pausedTimeMs: 0,
             isPaused: false,
             lastSeenAt: new Date(session.lastSeenAt),
-            durationSeconds: EXAM_DURATION_SECONDS,
+            durationSeconds: session.durationSeconds,
             status: "IN_PROGRESS",
             questions: {
               create: questions.map((question) => ({
@@ -276,6 +303,15 @@ export const examRepository = {
             renderedOptions: question.renderedOptions,
             selectedOption: question.selectedOption,
             isFlagged: cachedQuestion?.isFlagged ?? false,
+            confidence:
+              cachedQuestion?.confidence ??
+              parseConfidence(question.variables?.[CONFIDENCE_VARIABLE_KEY]),
+            timeSpentSeconds:
+              cachedQuestion?.timeSpentSeconds ??
+              Number(question.variables?.[TIME_SPENT_VARIABLE_KEY] ?? 0),
+            calculatorUsed:
+              cachedQuestion?.calculatorUsed ??
+              question.variables?.[CALCULATOR_USED_VARIABLE_KEY] === true,
             variables: question.variables ?? {},
             isCorrect: question.isCorrect,
             solutionSteps: recovered.solutionSteps,
@@ -298,62 +334,20 @@ export const examRepository = {
           lastPausedAt: row.lastPausedAt ? row.lastPausedAt.toISOString() : null,
           lastSeenAt: (row.lastSeenAt ?? row.startTime).toISOString(),
           durationSeconds: row.durationSeconds,
+          mode: cached?.mode ?? "EXAM",
+          isTimed: cached?.isTimed ?? true,
+          immediateFeedback: cached?.immediateFeedback ?? false,
+          formulaSheetEnabled: cached?.formulaSheetEnabled ?? false,
+          includeLegacy: cached?.includeLegacy ?? false,
           status: row.status as ExamSessionData["status"],
           questions,
         };
 
         localStore.set(sessionId, session);
-        return this.expireIfAbandoned(session);
+        return session;
       },
-      () => {
-        const cached = localStore.get(sessionId);
-        return cached ? this.expireIfAbandoned(cached) : null;
-      }
+      () => localStore.get(sessionId) ?? null
     );
-  },
-
-  /** Marks a stale sitting abandoned and persists that, then returns it. */
-  expireIfAbandoned(session: ExamSessionData): ExamSessionData {
-    if (!isAbandoned(session)) return session;
-
-    session.status = "ABANDONED";
-    session.isPaused = false;
-    localStore.set(session.id, session);
-
-    void tryPrisma(
-      async () => {
-        await prisma.examSession.update({
-          where: { id: session.id },
-          data: { status: "ABANDONED", isPaused: false },
-        });
-      },
-      () => undefined
-    );
-
-    return session;
-  },
-
-  /** Records that the exam page is still open. */
-  async recordHeartbeat(sessionId: string): Promise<ExamSessionData | null> {
-    const session = await this.getExamSession(sessionId);
-    if (!session) return null;
-    if (session.status !== "IN_PROGRESS" && session.status !== "PAUSED") return session;
-
-    const now = new Date();
-    session.lastSeenAt = now.toISOString();
-    localStore.set(sessionId, session);
-
-    await tryPrisma(
-      async () => {
-        await prisma.examSession.update({
-          where: { id: sessionId },
-          data: { lastSeenAt: now },
-        });
-      },
-      () => undefined
-    );
-
-    return session;
   },
 
   /** Ends a sitting immediately, without grading it. */
@@ -432,7 +426,7 @@ export const examRepository = {
     isFlagged?: boolean
   ): Promise<void> {
     const session = localStore.get(sessionId) ?? (await this.getExamSession(sessionId));
-    if (session?.status === "COMPLETED" || session?.status === "ABANDONED") return;
+    if (session?.status === "COMPLETED") return;
 
     const question = session?.questions.find((item) => item.id === questionId);
     if (question) {
@@ -448,6 +442,45 @@ export const examRepository = {
         await prisma.examQuestion.update({
           where: { id: questionId },
           data: { selectedOption },
+        });
+      },
+      () => undefined
+    );
+  },
+
+  /** Stores study metadata in the existing JSON variables column. */
+  async updateQuestionMeta(
+    sessionId: string,
+    questionId: string,
+    meta: {
+      confidence?: ConfidenceLevel | null;
+      timeSpentSeconds?: number;
+      calculatorUsed?: boolean;
+    }
+  ): Promise<void> {
+    const session = localStore.get(sessionId) ?? (await this.getExamSession(sessionId));
+    if (!session || session.status === "COMPLETED" || session.status === "ABANDONED") return;
+    const question = session.questions.find((item) => item.id === questionId);
+    if (!question) return;
+
+    if (meta.confidence !== undefined) question.confidence = meta.confidence;
+    if (meta.timeSpentSeconds !== undefined) {
+      question.timeSpentSeconds = Math.max(0, Math.round(meta.timeSpentSeconds));
+    }
+    if (meta.calculatorUsed !== undefined) question.calculatorUsed = meta.calculatorUsed;
+    question.variables = {
+      ...question.variables,
+      [CONFIDENCE_VARIABLE_KEY]: question.confidence ?? "",
+      [TIME_SPENT_VARIABLE_KEY]: question.timeSpentSeconds ?? 0,
+      [CALCULATOR_USED_VARIABLE_KEY]: question.calculatorUsed ?? false,
+    };
+    localStore.set(sessionId, session);
+
+    await tryPrisma(
+      async () => {
+        await prisma.examQuestion.update({
+          where: { id: questionId },
+          data: { variables: question.variables as object },
         });
       },
       () => undefined
@@ -560,11 +593,13 @@ export const examRepository = {
       userId: session.userId,
       startTime: session.startTime,
       endTime,
+      mode: session.mode,
+      isTimed: session.isTimed,
       totalQuestions,
       correctCount,
       unansweredCount,
       scorePercent: totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0,
-      isPassed: correctCount >= PASS_MARK,
+      isPassed: correctCount >= Math.ceil(totalQuestions * (PASS_MARK / EXAM_TOTAL_QUESTIONS)),
       totalTimeSpentSeconds: Math.floor(activeElapsedMs / 1000),
       totalPausedTimeSeconds: Math.floor(session.pausedTimeMs / 1000),
       domainMetrics,

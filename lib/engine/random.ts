@@ -65,3 +65,28 @@ export function createRng(seed?: string | number): Rng {
 
   return rng;
 }
+
+/**
+ * Draws a rate in [min, max] that stays at least `gap` away from `avoid`.
+ *
+ * A bond whose coupon rate equals its yield is priced at par, which makes every
+ * "assume it is worth par" distractor correct. Questions that carry such a
+ * distractor use this to keep the bond clearly at a premium or a discount.
+ */
+export function rateAwayFrom(
+  rng: Rng,
+  min: number,
+  max: number,
+  avoid: number,
+  gap: number,
+  decimals = 3
+): number {
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const candidate = rng.float(min, max, decimals);
+    if (Math.abs(candidate - avoid) >= gap) return candidate;
+  }
+  // Deterministic fallback for a range too narrow to satisfy by sampling.
+  const below = Number((avoid - gap).toFixed(decimals));
+  const above = Number((avoid + gap).toFixed(decimals));
+  return below >= min ? below : above;
+}

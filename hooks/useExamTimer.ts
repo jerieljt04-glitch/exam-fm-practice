@@ -17,6 +17,8 @@ export interface UseExamTimerOptions {
   onTimeExpire?: () => void;
   /** Persists the new pause state; a rejection rolls the toggle back. */
   onPauseToggle?: (isPaused: boolean) => Promise<void>;
+  /** False for untimed practice sets. */
+  enabled?: boolean;
 }
 
 export interface ExamTimerState {
@@ -64,6 +66,7 @@ export function useExamTimer({
   initialLastPausedAt = null,
   onTimeExpire,
   onPauseToggle,
+  enabled = true,
 }: UseExamTimerOptions): ExamTimerState {
   const [isPaused, setIsPaused] = useState(initialIsPaused);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -79,6 +82,7 @@ export function useExamTimer({
   onTimeExpireRef.current = onTimeExpire;
 
   const computeRemaining = useCallback(() => {
+    if (!enabled) return durationSeconds;
     const startMs = new Date(startTime).getTime();
     const now = Date.now();
 
@@ -89,10 +93,13 @@ export function useExamTimer({
 
     const activeElapsedMs = Math.max(0, now - startMs - pausedMs);
     return Math.max(0, durationSeconds - Math.floor(activeElapsedMs / 1000));
-  }, [durationSeconds, isPaused, pausedTimeMs, startTime]);
+  }, [durationSeconds, enabled, isPaused, pausedTimeMs, startTime]);
 
   useEffect(() => {
-    if (isExpired) return;
+    if (isExpired || !enabled) {
+      setRemainingSeconds(durationSeconds);
+      return;
+    }
 
     const tick = () => {
       const remaining = computeRemaining();
@@ -117,10 +124,10 @@ export function useExamTimer({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [computeRemaining, isExpired]);
+  }, [computeRemaining, durationSeconds, enabled, isExpired]);
 
   const togglePause = useCallback(async () => {
-    if (isExpired || isSyncing) return;
+    if (!enabled || isExpired || isSyncing) return;
 
     const nextIsPaused = !isPaused;
     const now = Date.now();
@@ -149,7 +156,7 @@ export function useExamTimer({
     } finally {
       setIsSyncing(false);
     }
-  }, [isExpired, isPaused, isSyncing, onPauseToggle, pausedTimeMs]);
+  }, [enabled, isExpired, isPaused, isSyncing, onPauseToggle, pausedTimeMs]);
 
   const elapsedPercent = useMemo(() => {
     if (durationSeconds <= 0) return 100;
@@ -164,8 +171,8 @@ export function useExamTimer({
     pausedTimeMs,
     elapsedPercent,
     togglePause,
-    isWarning: remainingSeconds < WARNING_THRESHOLD_SECONDS && remainingSeconds >= CRITICAL_THRESHOLD_SECONDS,
-    isCritical: remainingSeconds < CRITICAL_THRESHOLD_SECONDS,
+    isWarning: enabled && remainingSeconds < WARNING_THRESHOLD_SECONDS && remainingSeconds >= CRITICAL_THRESHOLD_SECONDS,
+    isCritical: enabled && remainingSeconds < CRITICAL_THRESHOLD_SECONDS,
     isExpired,
   };
 }

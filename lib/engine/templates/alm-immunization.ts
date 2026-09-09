@@ -240,7 +240,10 @@ $$A_1 = PV(A_1)(1 + ${y})^{${t1}} = ${mathNum(asset1Pv)} \\times ${rate(Math.pow
       const liability = rng.int(20, 60) * 10000;
       const liabilityTime = rng.int(8, 14);
       const before = rng.int(2, 5);
-      const after = rng.int(2, 6);
+      // A symmetric straddle would make the naive equal split the correct
+      // answer, leaving the question unable to discriminate between them, so
+      // the two legs must differ in length.
+      const after = rng.choice([2, 3, 4, 5, 6, 7].filter((years) => years !== before));
       const y = rng.float(0.04, 0.08, 3);
 
       const v = ActuarialMath.v(y);

@@ -5,27 +5,32 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Award,
+  BookOpenCheck,
   Calculator,
   ChevronRight,
   Clock,
   Loader2,
   Play,
   ShieldCheck,
+  SlidersHorizontal,
+  TimerOff,
   TrendingUp,
 } from "lucide-react";
 
 import { MathRenderer } from "@/components/MathRenderer";
+import { StudyDashboard } from "@/components/StudyDashboard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DOMAIN_DESCRIPTIONS,
   DOMAIN_LABELS,
+  DOMAIN_QUESTION_RANGES,
   DOMAIN_ORDER,
   EXAM_DURATION_MINUTES,
   EXAM_TOTAL_QUESTIONS,
   PASS_MARK,
   PASS_RATIO,
-  QUESTIONS_PER_DOMAIN,
+  type DifficultyLevel,
 } from "@/lib/exam-config";
 import type { TopicDomain } from "@/lib/types/exam";
 
@@ -42,6 +47,11 @@ export default function HomePage() {
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wasClosed, setWasClosed] = useState(false);
+  const [practiceCount, setPracticeCount] = useState(10);
+  const [practiceTimed, setPracticeTimed] = useState(false);
+  const [includeLegacy, setIncludeLegacy] = useState(false);
+  const [selectedDomains, setSelectedDomains] = useState<TopicDomain[]>([...DOMAIN_ORDER]);
+  const [selectedDifficulties, setSelectedDifficulties] = useState<DifficultyLevel[]>([1, 2, 3]);
 
   // Set when the exam page redirects here because its sitting had ended.
   // Read from the URL directly rather than through useSearchParams, which would
@@ -53,7 +63,7 @@ export default function HomePage() {
     }
   }, []);
 
-  const startExam = async () => {
+  const startExam = async (options: Record<string, unknown> = { mode: "EXAM" }) => {
     setIsStarting(true);
     setError(null);
 
@@ -61,7 +71,7 @@ export default function HomePage() {
       const response = await fetch("/api/exams/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: "candidate-1" }),
+        body: JSON.stringify({ userId: "candidate-1", ...options }),
       });
       const data = await response.json();
 
@@ -79,6 +89,47 @@ export default function HomePage() {
       setIsStarting(false);
     }
   };
+
+  const toggleDomain = (domain: TopicDomain) => {
+    setSelectedDomains((current) =>
+      current.includes(domain)
+        ? current.length === 1
+          ? current
+          : current.filter((item) => item !== domain)
+        : [...current, domain]
+    );
+  };
+
+  const toggleDifficulty = (difficulty: DifficultyLevel) => {
+    setSelectedDifficulties((current) =>
+      current.includes(difficulty)
+        ? current.length === 1
+          ? current
+          : current.filter((item) => item !== difficulty)
+        : [...current, difficulty].sort()
+    );
+  };
+
+  const startPractice = () =>
+    startExam({
+      mode: "PRACTICE",
+      totalQuestions: practiceCount,
+      domains: selectedDomains,
+      difficulties: selectedDifficulties,
+      isTimed: practiceTimed,
+      includeLegacy,
+    });
+
+  const startReview = (templateIds: string[], label: "due" | "mistakes") =>
+    startExam({
+      mode: "MISTAKES",
+      totalQuestions: Math.min(15, templateIds.length),
+      templateIds,
+      difficulties: [1, 2, 3, 4],
+      isTimed: false,
+      includeLegacy: true,
+      reviewLabel: label,
+    });
 
   return (
     <div className="dark flex min-h-screen flex-col bg-background text-foreground">
@@ -135,7 +186,7 @@ export default function HomePage() {
           )}
 
           <div className="flex flex-col items-center justify-center gap-3 pt-2">
-            <Button size="lg" onClick={startExam} disabled={isStarting} className="w-full sm:w-auto">
+            <Button size="lg" onClick={() => void startExam({ mode: "EXAM" })} disabled={isStarting} className="w-full sm:w-auto">
               {isStarting ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -169,6 +220,117 @@ export default function HomePage() {
               <Award className="h-3.5 w-3.5 text-emerald-400" /> {Math.round(PASS_RATIO * 100)}%
               benchmark ({PASS_MARK}/{EXAM_TOTAL_QUESTIONS})
             </span>
+          </div>
+        </section>
+
+        <section className="grid gap-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-slate-950 via-blue-950/50 to-slate-950 p-6 shadow-2xl sm:p-8 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="space-y-4">
+            <Badge variant="outline" className="gap-2 border-sky-500/30 bg-sky-500/10 text-sky-300">
+              <SlidersHorizontal className="h-3.5 w-3.5" /> Practice Mode
+            </Badge>
+            <h2 className="text-2xl font-black">Build a targeted study set</h2>
+            <p className="text-sm leading-relaxed text-slate-300">
+              Choose exactly what to train. Practice Mode gives immediate feedback, optional formulas,
+              confidence tracking, and a fresh worked example every time.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <BookOpenCheck className="mb-2 h-5 w-5 text-sky-400" />
+                <div className="text-sm font-bold">Immediate teaching</div>
+                <div className="mt-1 text-xs text-slate-400">See why an option is wrong and open the solution before moving on.</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <TimerOff className="mb-2 h-5 w-5 text-indigo-400" />
+                <div className="text-sm font-bold">Your pace</div>
+                <div className="mt-1 text-xs text-slate-400">Train untimed or use the exam pace of five minutes per question.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5 rounded-2xl border border-white/10 bg-black/20 p-5">
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Questions</div>
+              <div className="flex flex-wrap gap-2">
+                {[5, 10, 15, 30].map((count) => (
+                  <Button
+                    key={count}
+                    type="button"
+                    size="sm"
+                    variant={practiceCount === count ? "default" : "outline"}
+                    onClick={() => setPracticeCount(count)}
+                    className={practiceCount === count ? "" : "border-white/15 bg-white/5 text-slate-200"}
+                  >
+                    {count}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Domains</div>
+              <div className="flex flex-wrap gap-2">
+                {DOMAIN_ORDER.map((domain) => (
+                  <Button
+                    key={domain}
+                    type="button"
+                    size="sm"
+                    variant={selectedDomains.includes(domain) ? "secondary" : "outline"}
+                    onClick={() => toggleDomain(domain)}
+                    aria-pressed={selectedDomains.includes(domain)}
+                    className={!selectedDomains.includes(domain) ? "border-white/15 bg-white/5 text-slate-300" : ""}
+                  >
+                    {DOMAIN_LABELS[domain]}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Difficulty</div>
+              <div className="flex flex-wrap gap-2">
+                {([1, 2, 3, 4] as DifficultyLevel[]).map((difficulty) => (
+                  <Button
+                    key={difficulty}
+                    type="button"
+                    size="sm"
+                    variant={selectedDifficulties.includes(difficulty) ? "secondary" : "outline"}
+                    onClick={() => toggleDifficulty(difficulty)}
+                    aria-pressed={selectedDifficulties.includes(difficulty)}
+                    className={!selectedDifficulties.includes(difficulty) ? "border-white/15 bg-white/5 text-slate-300" : ""}
+                  >
+                    {difficulty === 1 ? "Basic" : difficulty === 2 ? "Intermediate" : difficulty === 3 ? "Advanced" : "Challenge"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={practiceTimed ? "secondary" : "outline"}
+                onClick={() => setPracticeTimed((value) => !value)}
+                aria-pressed={practiceTimed}
+                className={!practiceTimed ? "border-white/15 bg-white/5 text-slate-300" : ""}
+              >
+                <Clock className="h-4 w-4" /> {practiceTimed ? "Timed" : "Untimed"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={includeLegacy ? "secondary" : "outline"}
+                onClick={() => setIncludeLegacy((value) => !value)}
+                aria-pressed={includeLegacy}
+                className={!includeLegacy ? "border-white/15 bg-white/5 text-slate-300" : ""}
+              >
+                Legacy swaps/rate topics: {includeLegacy ? "On" : "Off"}
+              </Button>
+            </div>
+
+            <Button size="lg" onClick={() => void startPractice()} disabled={isStarting} className="w-full">
+              {isStarting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5 fill-current" />}
+              Start {practiceCount}-question practice set
+            </Button>
           </div>
         </section>
 
@@ -210,11 +372,10 @@ export default function HomePage() {
           <div className="flex flex-col items-start justify-between gap-3 border-b border-border pb-5 sm:flex-row sm:items-center">
             <div>
               <h2 className="text-xl font-bold">
-                Five syllabus domains, {QUESTIONS_PER_DOMAIN} questions each
+                Current Exam FM syllabus blueprint
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Every sitting draws {QUESTIONS_PER_DOMAIN} distinct question types per domain, so no
-                structure repeats within an exam.
+                Each mock exam varies the domain counts inside the current published percentage ranges.
               </p>
             </div>
             <Badge variant="success" className="font-mono">
@@ -234,7 +395,7 @@ export default function HomePage() {
                       TOPIC {String(index + 1).padStart(2, "0")}
                     </span>
                     <Badge variant="muted" className="text-[10px] uppercase">
-                      {QUESTIONS_PER_DOMAIN} questions
+                      {DOMAIN_QUESTION_RANGES[domain].min}–{DOMAIN_QUESTION_RANGES[domain].max} questions
                     </Badge>
                   </div>
                   <h3 className="mb-1 text-sm font-bold">{DOMAIN_LABELS[domain]}</h3>
@@ -262,13 +423,15 @@ export default function HomePage() {
                 </p>
               </div>
 
-              <Button onClick={startExam} disabled={isStarting} size="sm" className="w-full">
-                Start practice attempt
+              <Button onClick={() => void startExam({ mode: "EXAM" })} disabled={isStarting} size="sm" className="w-full">
+                Start full mock exam
                 <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
         </section>
+
+        <StudyDashboard onStartReview={(ids, label) => void startReview(ids, label)} isStarting={isStarting} />
       </main>
 
       <footer className="border-t border-border/80 bg-background py-8 text-center text-xs text-muted-foreground">

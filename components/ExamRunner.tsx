@@ -10,6 +10,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Calculator,
+  Gauge,
+  HelpCircle,
+  Lightbulb,
   Loader2,
   Pause,
   Play,
@@ -36,10 +40,9 @@ import { useExamTimer } from "@/hooks/useExamTimer";
 import {
   DIFFICULTY_LABELS,
   DOMAIN_LABELS,
-  HEARTBEAT_INTERVAL_MS,
   OPTION_KEYS,
 } from "@/lib/exam-config";
-import type { ExamSessionData } from "@/lib/types/exam";
+import type { ConfidenceLevel, ExamSessionData } from "@/lib/types/exam";
 import { cn } from "@/lib/utils";
 
 interface ExamRunnerProps {
@@ -54,11 +57,17 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [showFormulaSheet, setShowFormulaSheet] = useState(false);
   const [showTimeUpDialog, setShowTimeUpDialog] = useState(false);
+  const [showPracticeSolution, setShowPracticeSolution] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const totalQuestions = session.questions.length;
   const currentQuestion = session.questions[currentIndex] ?? session.questions[0];
   const hasSubmittedRef = useRef(false);
+  const questionSecondsRef = useRef<Record<string, number>>(
+    Object.fromEntries(initialSession.questions.map((question) => [question.id, question.timeSpentSeconds ?? 0]))
+  );
+  const activeQuestionStartedAtRef = useRef(Date.now());
+  const submitExamRef = useRef<() => void>(() => undefined);
 
   const patchSession = useCallback(
     async (body: Record<string, unknown>) => {
@@ -72,38 +81,18 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
     [session.id]
   );
 
-  const submitExam = useCallback(async () => {
-    if (hasSubmittedRef.current) return;
-    hasSubmittedRef.current = true;
-    setIsSubmitting(true);
-    setSubmitError(null);
-
-    try {
-      const response = await fetch(`/api/exams/${session.id}/submit`, { method: "POST" });
-      if (!response.ok) throw new Error(`Submission failed with status ${response.status}`);
-      router.push(`/exam/${session.id}/review`);
-    } catch (error) {
-      console.error("Failed to submit exam:", error);
-      hasSubmittedRef.current = false;
-      setIsSubmitting(false);
-      setSubmitError(
-        "Your answers could not be submitted. Check your connection and try again — nothing has been lost."
-      );
-    }
-  }, [router, session.id]);
-
-  const handleTimeExpire = useCallback(() => {
-    setShowSubmitDialog(false);
-    setShowTimeUpDialog(true);
-    void submitExam();
-  }, [submitExam]);
-
   const handlePauseSync = useCallback(
     async (isPaused: boolean) => {
       await patchSession({ action: "TOGGLE_PAUSE", isPaused });
     },
     [patchSession]
   );
+
+  const handleTimeExpire = useCallback(() => {
+    setShowSubmitDialog(false);
+    setShowTimeUpDialog(true);
+    submitExamRef.current();
+  }, []);
 
   const {
     formattedTime,
@@ -122,6 +111,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
     initialLastPausedAt: session.lastPausedAt,
     onTimeExpire: handleTimeExpire,
     onPauseToggle: handlePauseSync,
+    enabled: session.isTimed,
   });
 
   const interactionLocked = isPaused || isExpired || isSubmitting;
@@ -137,9 +127,55 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
     []
   );
 
+  const persistCurrentTime = useCallback(async () => {
+    if (isPaused) return;
+    const question = session.questions[currentIndex];
+    if (!question) return;
+    const elapsed = Math.max(0, Math.floor((Date.now() - activeQuestionStartedAtRef.current) / 1000));
+    if (elapsed === 0) return;
+    const nextSeconds = (questionSecondsRef.current[question.id] ?? 0) + elapsed;
+    questionSecondsRef.current[question.id] = nextSeconds;
+    activeQuestionStartedAtRef.current = Date.now();
+    updateQuestion(currentIndex, { timeSpentSeconds: nextSeconds });
+    try {
+      await patchSession({
+        action: "UPDATE_META",
+        questionId: question.id,
+        timeSpentSeconds: nextSeconds,
+      });
+    } catch (error) {
+      console.error("Failed to save question timing:", error);
+    }
+  }, [currentIndex, isPaused, patchSession, session.questions, updateQuestion]);
+
+  const submitExam = useCallback(async () => {
+    if (hasSubmittedRef.current) return;
+    hasSubmittedRef.current = true;
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      await persistCurrentTime();
+      const response = await fetch(`/api/exams/${session.id}/submit`, { method: "POST" });
+      if (!response.ok) throw new Error(`Submission failed with status ${response.status}`);
+      router.push(`/exam/${session.id}/review`);
+    } catch (error) {
+      console.error("Failed to submit exam:", error);
+      hasSubmittedRef.current = false;
+      setIsSubmitting(false);
+      setSubmitError(
+        "Your answers could not be submitted. Check your connection and try again — nothing has been lost."
+      );
+    }
+  }, [persistCurrentTime, router, session.id]);
+  submitExamRef.current = () => void submitExam();
+
   const handleSelectOption = useCallback(
     async (optionKey: string) => {
-      if (interactionLocked) return;
+      if (
+        interactionLocked ||
+        (session.immediateFeedback && session.questions[currentIndex]?.selectedOption !== null)
+      ) return;
       const index = currentIndex;
       const questionId = session.questions[index]?.id;
       if (!questionId) return;
@@ -154,7 +190,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
         updateQuestion(index, { selectedOption: previousSelection });
       }
     },
-    [currentIndex, interactionLocked, patchSession, session.questions, updateQuestion]
+    [currentIndex, interactionLocked, patchSession, session.immediateFeedback, session.questions, updateQuestion]
   );
 
   const handleToggleFlag = useCallback(async () => {
@@ -178,33 +214,59 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
     }
   }, [currentIndex, interactionLocked, patchSession, session.questions, updateQuestion]);
 
-  // Report that this tab is still open. The server ends a sitting that stops
-  // reporting, so closing the tab ends the exam while a reload — which resumes
-  // the heartbeat within a second — does not.
-  useEffect(() => {
-    if (isSubmitting) return;
+  const handleConfidence = useCallback(
+    async (confidence: ConfidenceLevel) => {
+      if (interactionLocked) return;
+      const question = session.questions[currentIndex];
+      if (!question) return;
+      updateQuestion(currentIndex, { confidence });
+      try {
+        await patchSession({ action: "UPDATE_META", questionId: question.id, confidence });
+      } catch (error) {
+        console.error("Failed to save confidence:", error);
+        updateQuestion(currentIndex, { confidence: question.confidence ?? null });
+      }
+    },
+    [currentIndex, interactionLocked, patchSession, session.questions, updateQuestion]
+  );
 
-    const beat = () => {
-      void fetch(`/api/exams/${session.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "HEARTBEAT" }),
-        keepalive: true,
-      }).catch(() => undefined);
-    };
+  const handleCalculatorUsed = useCallback(async () => {
+    if (interactionLocked) return;
+    const question = session.questions[currentIndex];
+    if (!question) return;
+    const calculatorUsed = !question.calculatorUsed;
+    updateQuestion(currentIndex, { calculatorUsed });
+    try {
+      await patchSession({ action: "UPDATE_META", questionId: question.id, calculatorUsed });
+    } catch (error) {
+      console.error("Failed to save calculator use:", error);
+      updateQuestion(currentIndex, { calculatorUsed: question.calculatorUsed ?? false });
+    }
+  }, [currentIndex, interactionLocked, patchSession, session.questions, updateQuestion]);
 
-    beat();
-    const interval = window.setInterval(beat, HEARTBEAT_INTERVAL_MS);
-    return () => window.clearInterval(interval);
-  }, [isSubmitting, session.id]);
+  const moveToQuestion = useCallback(
+    (nextIndex: number) => {
+      void persistCurrentTime();
+      activeQuestionStartedAtRef.current = Date.now();
+      setShowPracticeSolution(false);
+      setCurrentIndex(Math.max(0, Math.min(nextIndex, totalQuestions - 1)));
+    },
+    [persistCurrentTime, totalQuestions]
+  );
 
   const goToNext = useCallback(() => {
-    setCurrentIndex((index) => Math.min(index + 1, totalQuestions - 1));
-  }, [totalQuestions]);
+    moveToQuestion(currentIndex + 1);
+  }, [currentIndex, moveToQuestion]);
 
   const goToPrevious = useCallback(() => {
-    setCurrentIndex((index) => Math.max(index - 1, 0));
-  }, []);
+    moveToQuestion(currentIndex - 1);
+  }, [currentIndex, moveToQuestion]);
+
+  const handleTogglePause = useCallback(async () => {
+    if (!isPaused) await persistCurrentTime();
+    await togglePause();
+    activeQuestionStartedAtRef.current = Date.now();
+  }, [isPaused, persistCurrentTime, togglePause]);
 
   // Keyboard shortcuts mirroring the CBT: arrows to move, A–E to answer, F to flag.
   useEffect(() => {
@@ -250,6 +312,10 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
   }, [session.questions]);
 
   const unansweredCount = totalQuestions - answeredCount;
+  const selectedAnswer = currentQuestion.renderedOptions.find(
+    (option) => option.key === currentQuestion.selectedOption
+  );
+  const practiceAnswered = session.immediateFeedback && Boolean(selectedAnswer);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -277,21 +343,30 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                     ? "border-amber-500 bg-amber-950/70 text-amber-300"
                     : "border-slate-700 bg-slate-800 text-emerald-400"
               )}
-              role="timer"
+              role={session.isTimed ? "timer" : undefined}
               aria-live="off"
-              aria-label={`Time remaining ${formattedTime}`}
+              aria-label={session.isTimed ? `Time remaining ${formattedTime}` : "Untimed practice"}
             >
-              <Clock className="h-4 w-4 text-slate-400" />
-              <span>{formattedTime}</span>
+              {session.isTimed ? (
+                <>
+                  <Clock className="h-4 w-4 text-slate-400" />
+                  <span>{formattedTime}</span>
+                </>
+              ) : (
+                <>
+                  <Gauge className="h-4 w-4 text-blue-400" />
+                  <span className="font-sans text-sm tracking-normal text-blue-300">Untimed practice</span>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
-              <Tooltip>
+              {session.isTimed && <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => void togglePause()}
+                    onClick={() => void handleTogglePause()}
                     disabled={isSyncing || isExpired}
                     // The visible label collapses on narrow viewports, so the
                     // button needs its own accessible name.
@@ -311,9 +386,9 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                 <TooltipContent>
                   {isPaused ? "Resume the exam and restart the clock" : "Pause the clock and hide the questions"}
                 </TooltipContent>
-              </Tooltip>
+              </Tooltip>}
 
-              <Tooltip>
+              {session.formulaSheetEnabled && <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="secondary"
@@ -328,7 +403,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Open the formula reference sheet</TooltipContent>
-              </Tooltip>
+              </Tooltip>}
 
               <Button
                 size="sm"
@@ -408,11 +483,22 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                   value={currentQuestion.selectedOption ?? ""}
                   onValueChange={(value) => void handleSelectOption(value)}
                   aria-label="Answer choices"
+                  disabled={interactionLocked || practiceAnswered}
                 >
                   {currentQuestion.renderedOptions.map((option) => {
                     const isSelected = currentQuestion.selectedOption === option.key;
+                    const revealCorrect = practiceAnswered && option.isCorrect;
+                    const revealWrong = practiceAnswered && isSelected && !option.isCorrect;
                     return (
-                      <RadioGroupItem key={option.key} value={option.key} id={`option-${option.key}`}>
+                      <RadioGroupItem
+                        key={option.key}
+                        value={option.key}
+                        id={`option-${option.key}`}
+                        className={cn(
+                          revealCorrect && "border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/20",
+                          revealWrong && "border-red-500 bg-red-50/80 dark:bg-red-950/20"
+                        )}
+                      >
                         <span
                           className={cn(
                             "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors",
@@ -431,6 +517,84 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                     );
                   })}
                 </RadioGroup>
+
+                <div className="mt-6 flex flex-wrap items-center gap-2 border-t pt-5">
+                  <span className="mr-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                    <HelpCircle className="h-4 w-4" /> Confidence
+                  </span>
+                  {(["SURE", "UNSURE", "GUESS"] as const).map((confidence) => (
+                    <Button
+                      key={confidence}
+                      type="button"
+                      size="sm"
+                      variant={currentQuestion.confidence === confidence ? "default" : "outline"}
+                      onClick={() => void handleConfidence(confidence)}
+                      disabled={interactionLocked}
+                      aria-pressed={currentQuestion.confidence === confidence}
+                    >
+                      {confidence === "SURE" ? "Sure" : confidence === "UNSURE" ? "Unsure" : "Guess"}
+                    </Button>
+                  ))}
+                  <span className="mx-1 hidden h-6 w-px bg-border sm:block" />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={currentQuestion.calculatorUsed ? "secondary" : "outline"}
+                    onClick={() => void handleCalculatorUsed()}
+                    disabled={interactionLocked}
+                    aria-pressed={Boolean(currentQuestion.calculatorUsed)}
+                    title="Self-report whether you used your approved calculator for this question"
+                  >
+                    <Calculator className="h-4 w-4" />
+                    {currentQuestion.calculatorUsed ? "Calculator used" : "Mark calculator used"}
+                  </Button>
+                </div>
+
+                {practiceAnswered && (
+                  <div
+                    className={cn(
+                      "mt-5 rounded-xl border p-4",
+                      selectedAnswer?.isCorrect
+                        ? "border-emerald-500/40 bg-emerald-500/10"
+                        : "border-red-500/40 bg-red-500/10"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      {selectedAnswer?.isCorrect ? (
+                        <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" />
+                      ) : (
+                        <AlertTriangle className="mt-0.5 h-5 w-5 text-red-500" />
+                      )}
+                      <div className="flex-1">
+                        <h3 className="font-bold">
+                          {selectedAnswer?.isCorrect ? "Correct" : "Not quite"}
+                        </h3>
+                        {!selectedAnswer?.isCorrect && selectedAnswer?.distractorExplanation && (
+                          <MathRenderer
+                            content={selectedAnswer.distractorExplanation}
+                            className="mt-1 text-sm text-muted-foreground"
+                          />
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="mt-2 px-0"
+                          onClick={() => setShowPracticeSolution((shown) => !shown)}
+                        >
+                          <Lightbulb className="h-4 w-4" />
+                          {showPracticeSolution ? "Hide worked solution" : "Show worked solution"}
+                        </Button>
+                        {showPracticeSolution && (
+                          <MathRenderer
+                            content={currentQuestion.solutionSteps}
+                            className="mt-3 border-t pt-3 text-sm leading-relaxed"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between gap-3 border-t bg-muted/50 px-6 py-4">
@@ -488,7 +652,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                     <button
                       key={question.id}
                       type="button"
-                      onClick={() => setCurrentIndex(index)}
+                      onClick={() => moveToQuestion(index)}
                       aria-current={isCurrent ? "true" : undefined}
                       aria-label={`Question ${index + 1}${isAnswered ? ", answered" : ", not answered"}${
                         question.isFlagged ? ", flagged" : ""
@@ -561,7 +725,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
               </div>
             </div>
 
-            <Button size="lg" className="w-full" onClick={() => void togglePause()} disabled={isSyncing}>
+            <Button size="lg" className="w-full" onClick={() => void handleTogglePause()} disabled={isSyncing}>
               {isSyncing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5 fill-current" />}
               Resume exam
             </Button>
@@ -644,7 +808,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
               </div>
               <DialogTitle>Time is up</DialogTitle>
               <DialogDescription>
-                The 150-minute limit has been reached. Your exam is being submitted automatically.
+                The {Math.round(session.durationSeconds / 60)}-minute limit has been reached. Your set is being submitted automatically.
               </DialogDescription>
             </DialogHeader>
             {submitError ? (
@@ -661,7 +825,9 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
           </DialogContent>
         </Dialog>
 
-        <FormulaSheetModal open={showFormulaSheet} onOpenChange={setShowFormulaSheet} />
+        {session.formulaSheetEnabled && (
+          <FormulaSheetModal open={showFormulaSheet} onOpenChange={setShowFormulaSheet} />
+        )}
       </div>
     </TooltipProvider>
   );

@@ -49,6 +49,7 @@ export interface ConsistencyCheck {
 export type ParameterValue = string | number | boolean | number[] | string[];
 
 export interface GeneratedQuestionItem {
+  kind?: "NUMERIC";
   questionText: string;
   variables: Record<string, ParameterValue>;
   correctValue: number;
@@ -58,6 +59,24 @@ export interface GeneratedQuestionItem {
   /** Invariants asserted by the engine test suite. */
   checks?: ConsistencyCheck[];
 }
+
+export interface AuthoredChoice {
+  text: string;
+  isCorrect: boolean;
+  type?: DistractorType;
+  explanation: string;
+}
+
+export interface GeneratedChoiceQuestionItem {
+  kind: "CHOICE";
+  questionText: string;
+  variables: Record<string, ParameterValue>;
+  choices: AuthoredChoice[];
+  solutionSteps: string;
+  checks?: ConsistencyCheck[];
+}
+
+export type GeneratedTemplateItem = GeneratedQuestionItem | GeneratedChoiceQuestionItem;
 
 export interface QuestionTemplateDefinition {
   /** Stable identifier; also the primary key of the `QuestionTemplate` row. */
@@ -73,7 +92,7 @@ export interface QuestionTemplateDefinition {
   /** Number of interdependent sub-problems the candidate must chain. */
   steps: number;
   /** Draws a fresh parameter set and returns a fully rendered question. */
-  generate: (rng: Rng) => GeneratedQuestionItem;
+  generate: (rng: Rng) => GeneratedTemplateItem;
 }
 
 /** Convenience constructor keeping distractor literals readable. */
