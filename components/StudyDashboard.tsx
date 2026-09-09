@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { BarChart3, Brain, CalendarClock, History, RotateCcw, Target } from "lucide-react";
+import { BarChart3, Brain, CalendarClock, History, RotateCcw, Target, Trash2 } from "lucide-react";
 
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -13,6 +13,7 @@ import {
   EMPTY_STUDY_HISTORY,
   mistakeTemplateIds,
   readStudyHistory,
+  STUDY_HISTORY_KEY,
   type StudyHistory,
 } from "@/lib/study-history";
 
@@ -24,9 +25,23 @@ interface StudyDashboardProps {
 export function StudyDashboard({ onStartReview, isStarting }: StudyDashboardProps) {
   const [history, setHistory] = useState<StudyHistory>(EMPTY_STUDY_HISTORY);
 
+  const [confirmingClear, setConfirmingClear] = useState(false);
+
   useEffect(() => {
     setHistory(readStudyHistory(window.localStorage));
   }, []);
+
+  // History is per-device, so clearing it is a local operation. Attempts and
+  // mastery go; nothing about how the platform works changes.
+  const clearHistory = () => {
+    try {
+      window.localStorage.removeItem(STUDY_HISTORY_KEY);
+    } catch {
+      // A browser with site data blocked has nothing stored to clear.
+    }
+    setHistory(EMPTY_STUDY_HISTORY);
+    setConfirmingClear(false);
+  };
 
   const due = useMemo(() => dueTemplateIds(history), [history]);
   const mistakes = useMemo(() => mistakeTemplateIds(history), [history]);
@@ -67,6 +82,25 @@ export function StudyDashboard({ onStartReview, isStarting }: StudyDashboardProp
           >
             <RotateCcw className="h-4 w-4" /> Retry mistakes ({mistakes.length})
           </Button>
+          {confirmingClear ? (
+            <>
+              <Button variant="destructive" onClick={clearHistory}>
+                <Trash2 className="h-4 w-4" /> Delete everything
+              </Button>
+              <Button variant="ghost" onClick={() => setConfirmingClear(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmingClear(true)}
+              disabled={history.attempts.length === 0}
+              title="Delete the attempts and mastery stored on this device"
+            >
+              <Trash2 className="h-4 w-4" /> Clear history
+            </Button>
+          )}
         </div>
       </div>
 
