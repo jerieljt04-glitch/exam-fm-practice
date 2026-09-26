@@ -5,7 +5,9 @@
  * text that used to render as literal `$12^{\text{th}}$` on screen.
  */
 
-import { parseMarkup, tokenizeMath, type MathSegment } from "../lib/math/markup";
+import katex from "katex";
+import { normalizePlainMathText, parseMarkup, tokenizeMath, type MathSegment } from "../lib/math/markup";
+import { DOMAIN_FORMULAS, FORMULA_SECTIONS } from "../lib/math/reference-formulas";
 
 let failures = 0;
 
@@ -24,6 +26,19 @@ const display = (value: string): MathSegment => ({ type: "display", value });
 
 console.log("Markup tokenizer");
 console.log("================");
+
+// --- Prose must not expose math-mode thousands separators --------------------
+describe("normalize math separator in plain text", normalizePlainMathText("The book value is 2{,}718.80."), "The book value is 2,718.80.");
+describe("normalize escaped math separator in plain text", normalizePlainMathText("The book value is 2\\{,}699.27."), "The book value is 2,699.27.");
+describe("leave non-thousands braces alone", normalizePlainMathText("Use x_{,} in this label."), "Use x_{,} in this label.");
+describe(
+  "render screenshot bond question prose with correct separators",
+  parseMarkup("The book value immediately after a coupon is 2{,}718.80, and the book value immediately after the next coupon is 2{,}699.27.")
+    .filter((node) => node.type === "text")
+    .map((node) => normalizePlainMathText(node.value))
+    .join(""),
+  "The book value immediately after a coupon is 2,718.80, and the book value immediately after the next coupon is 2,699.27."
+);
 
 // --- The reported regression ------------------------------------------------
 const REPORTED = `A loan of $160,000 is repaid with equal annual payments at the end of each year for 28 years at an annual effective interest rate of 6.10%.
@@ -130,6 +145,32 @@ describe("display math clears emphasis", parseMarkup("**bold**\n$$x = 1$$"), [
   { type: "break" },
   { type: "display", value: "x = 1" },
 ]);
+
+// The reference sheet and landing-page formulas are outside the generated
+// question bank, so the engine's KaTeX checks do not otherwise reach them.
+const renderMath = (name: string, expression: string, displayMode = false) => {
+  try {
+    katex.renderToString(expression, { displayMode, throwOnError: true, strict: false });
+  } catch (error) {
+    failures += 1;
+    console.error(`  ✗ ${name}: ${String(error)}`);
+  }
+};
+
+for (const [domain, formula] of Object.entries(DOMAIN_FORMULAS)) {
+  renderMath(`Landing formula ${domain}`, formula);
+}
+for (const section of FORMULA_SECTIONS) {
+  for (const formula of section.formulas) {
+    for (const content of [formula.name, formula.latex]) {
+      for (const segment of parseMarkup(content)) {
+        if (segment.type === "inline" || segment.type === "display") {
+          renderMath(`${section.title} / ${formula.name}`, segment.value, segment.type === "display");
+        }
+      }
+    }
+  }
+}
 
 console.log("\nResult");
 console.log("======");

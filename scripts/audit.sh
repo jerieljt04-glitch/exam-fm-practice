@@ -21,3 +21,7 @@ command -v python3 >/dev/null 2>&1 || {
 echo "Auditing the question engine"
 npx ts-node --compiler-options '{"module":"CommonJS"}' "$ROOT/scripts/audit-dump.ts" "$DUMP" "${1:-8}"
 python3 "$ROOT/scripts/audit-answers.py" "$DUMP"
+
+echo
+echo "Checking every question type against the SOA's published answers"
+python3 "$ROOT/scripts/audit-anchors.py"

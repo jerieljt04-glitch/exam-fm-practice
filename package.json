@@ -19,7 +19,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "prisma:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
-    "audit": "bash scripts/audit.sh"
+    "audit": "bash scripts/audit.sh",
+    "audit:anchors": "python3 scripts/audit-anchors.py"
   },
   "prisma": {
     "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"

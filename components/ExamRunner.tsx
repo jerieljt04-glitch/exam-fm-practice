@@ -33,7 +33,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-import { Progress } from "./ui/progress";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { useExamTimer } from "@/hooks/useExamTimer";
@@ -268,7 +267,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
     activeQuestionStartedAtRef.current = Date.now();
   }, [isPaused, persistCurrentTime, togglePause]);
 
-  // Keyboard shortcuts mirroring the CBT: arrows to move, A–E to answer, F to flag.
+  // Keyboard shortcuts mirroring CBT: arrows to move, A–E to answer, F to flag.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (interactionLocked || showFormulaSheet || showSubmitDialog) return;
@@ -319,29 +318,37 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex min-h-screen flex-col bg-background">
-        {/* ================= Sticky CBT status bar ================= */}
-        <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-900 text-slate-100 shadow-sm">
+      <div className="flex min-h-screen flex-col selection:bg-blue-500/30 selection:text-white">
+        {/* ================= Sticky Glass CBT Header ================= */}
+        {/* The header is sticky, so its backdrop-filter is re-composited on every
+            scroll frame. A smaller radius over a more opaque base keeps the glass
+            read while cutting that per-frame cost substantially. */}
+        <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#080c15]/92 text-white shadow-xl backdrop-blur-md">
           <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3">
-              <span className="hidden text-sm font-bold tracking-wide text-blue-400 sm:inline">
+              <span className="hidden font-bold tracking-tight text-white sm:inline">
                 Exam FM Practice
               </span>
-              <span className="hidden text-slate-600 sm:inline">|</span>
-              <span className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300">
-                Question <span className="font-bold text-white">{currentIndex + 1}</span> of{" "}
-                {totalQuestions}
-              </span>
+              <span className="hidden text-white/20 sm:inline">|</span>
+              <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-slate-300">
+                <span>Question</span>
+                <span className="font-mono text-sm font-black text-white">{currentIndex + 1}</span>
+                <span className="text-slate-400">of</span>
+                <span className="font-mono text-xs font-bold text-slate-300">{totalQuestions}</span>
+              </div>
             </div>
 
+            {/* Glowing Timer Capsule */}
             <div
               className={cn(
-                "flex items-center gap-2 rounded-lg border px-3 py-1.5 font-mono text-base font-bold tracking-wider tabular-nums transition-colors sm:text-lg",
+                "flex items-center gap-2 rounded-xl border px-3.5 py-1.5 font-mono text-sm font-bold tracking-wider tabular-nums transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200 sm:text-base",
                 isCritical
-                  ? "animate-pulse border-red-500 bg-red-950/70 text-red-300"
+                  ? "animate-pulse border-red-400/50 bg-red-500/20 text-red-200 shadow-[0_0_20px_rgba(239,68,68,0.35)]"
                   : isWarning
-                    ? "border-amber-500 bg-amber-950/70 text-amber-300"
-                    : "border-slate-700 bg-slate-800 text-emerald-400"
+                    ? "border-amber-400/40 bg-amber-500/20 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                    : session.isTimed
+                      ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                      : "border-blue-400/30 bg-blue-500/15 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.15)]"
               )}
               role={session.isTimed ? "timer" : undefined}
               aria-live="off"
@@ -349,134 +356,158 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
             >
               {session.isTimed ? (
                 <>
-                  <Clock className="h-4 w-4 text-slate-400" />
+                  <Clock className="h-4 w-4" />
                   <span>{formattedTime}</span>
                 </>
               ) : (
                 <>
                   <Gauge className="h-4 w-4 text-blue-400" />
-                  <span className="font-sans text-sm tracking-normal text-blue-300">Untimed practice</span>
+                  <span className="font-sans text-xs tracking-normal text-blue-200">Untimed practice</span>
                 </>
               )}
             </div>
 
+            {/* Action Buttons */}
             <div className="flex items-center gap-2">
-              {session.isTimed && <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void handleTogglePause()}
-                    disabled={isSyncing || isExpired}
-                    // The visible label collapses on narrow viewports, so the
-                    // button needs its own accessible name.
-                    aria-label={isPaused ? "Resume exam" : "Pause exam"}
-                    className="border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700"
-                  >
-                    {isSyncing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : isPaused ? (
-                      <Play className="h-4 w-4 fill-emerald-400 text-emerald-400" />
-                    ) : (
-                      <Pause className="h-4 w-4 fill-amber-400 text-amber-400" />
-                    )}
-                    <span className="hidden sm:inline">{isPaused ? "Resume" : "Pause"}</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isPaused ? "Resume the exam and restart the clock" : "Pause the clock and hide the questions"}
-                </TooltipContent>
-              </Tooltip>}
+              {session.isTimed && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleTogglePause()}
+                      disabled={isSyncing || isExpired}
+                      aria-label={isPaused ? "Resume exam" : "Pause exam"}
+                      className="border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]"
+                    >
+                      {isSyncing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isPaused ? (
+                        <Play className="h-4 w-4 fill-emerald-400 text-emerald-400" />
+                      ) : (
+                        <Pause className="h-4 w-4 fill-amber-400 text-amber-400" />
+                      )}
+                      <span className="hidden sm:inline">{isPaused ? "Resume" : "Pause"}</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isPaused ? "Resume the exam and restart the clock" : "Pause the clock and hide the questions"}
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
-              {session.formulaSheetEnabled && <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowFormulaSheet(true)}
-                    disabled={isPaused}
-                    aria-label="Open the formula reference sheet"
-                    className="border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700"
-                  >
-                    <BookOpen className="h-4 w-4 text-blue-400" />
-                    <span className="hidden md:inline">Formulas</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Open the formula reference sheet</TooltipContent>
-              </Tooltip>}
+              {session.formulaSheetEnabled && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowFormulaSheet(true)}
+                      disabled={isPaused}
+                      aria-label="Open the formula reference sheet"
+                      className="border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20 hover:bg-white/[0.08]"
+                    >
+                      <BookOpen className="h-4 w-4 text-blue-400" />
+                      <span className="hidden md:inline">Formulas</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open the formula reference sheet</TooltipContent>
+                </Tooltip>
+              )}
 
               <Button
                 size="sm"
                 onClick={() => setShowSubmitDialog(true)}
                 disabled={isSubmitting}
                 aria-label="Submit the exam for grading"
+                className="font-bold shadow-lg shadow-blue-500/25"
               >
                 <Send className="h-4 w-4" />
                 <span>Submit</span>
               </Button>
             </div>
           </div>
-          <Progress
-            value={elapsedPercent}
-            className="h-1 rounded-none bg-slate-800"
-            indicatorClassName={cn(
-              "rounded-none",
-              isCritical ? "bg-red-500" : isWarning ? "bg-amber-500" : "bg-blue-500"
-            )}
-          />
+
+          {/* Thin glowing progress track */}
+          <div className="h-1 w-full bg-white/[0.06]">
+            <div
+              className={cn(
+                "h-full transition-[width] duration-300 ease-out",
+                isCritical
+                  ? "bg-gradient-to-r from-red-500 to-rose-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                  : isWarning
+                    ? "bg-gradient-to-r from-amber-500 to-orange-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                    : "bg-gradient-to-r from-blue-500 via-sky-400 to-indigo-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+              )}
+              style={{ width: `${Math.min(100, Math.max(0, elapsedPercent))}%` }}
+            />
+          </div>
         </header>
 
-        {/* ================= Exam body ================= */}
+        {/* ================= Exam Body ================= */}
         <main
           className={cn(
-            "mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-6 p-4 transition-all sm:p-6 lg:grid-cols-4",
-            isPaused && "pointer-events-none select-none blur-md"
+            // Only opacity is transitioned. Animating a full-page blur filter
+            // forces a fresh rasterisation of the entire subtree on every frame.
+            "mx-auto grid w-full max-w-7xl flex-1 grid-cols-1 gap-6 p-4 transition-opacity duration-300 sm:p-6 lg:grid-cols-4",
+            isPaused && "pointer-events-none select-none opacity-30"
           )}
           aria-hidden={isPaused}
         >
+          {/* Main Question Panel */}
           <section className="flex flex-col gap-4 lg:col-span-3">
-            <Card className="flex flex-1 flex-col overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/50 px-6 py-4">
+            <Card className="flex flex-1 flex-col overflow-hidden border-white/[0.09] bg-slate-900/75 shadow-2xl">
+              {/* Question Header Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] bg-white/[0.02] px-6 py-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="default" className="uppercase tracking-wide">
+                  <Badge
+                    variant="outline"
+                    className="border-blue-400/30 bg-blue-500/15 text-[11px] font-bold uppercase tracking-wider text-blue-300"
+                  >
                     {DOMAIN_LABELS[currentQuestion.domain]}
                   </Badge>
-                  <Badge
-                    variant={currentQuestion.difficulty >= 3 ? "warning" : "muted"}
-                    className="uppercase tracking-wide"
-                    title={`This item chains ${currentQuestion.steps} interdependent steps`}
-                  >
-                    {DIFFICULTY_LABELS[currentQuestion.difficulty]}
-                  </Badge>
-                  <span className="hidden text-xs text-muted-foreground lg:inline">
-                    {currentQuestion.templateTitle}
-                  </span>
+                  {session.mode !== "EXAM" && (
+                    <Badge
+                      variant={currentQuestion.difficulty >= 3 ? "warning" : "muted"}
+                      className="text-[11px] uppercase tracking-wide font-semibold"
+                      title={`This item chains ${currentQuestion.steps} interdependent steps`}
+                    >
+                      {DIFFICULTY_LABELS[currentQuestion.difficulty]}
+                    </Badge>
+                  )}
+                  {session.mode !== "EXAM" && (
+                    <span className="hidden text-xs font-medium text-slate-400 lg:inline">
+                      {currentQuestion.templateTitle}
+                    </span>
+                  )}
                 </div>
 
-                <Button
-                  variant={currentQuestion.isFlagged ? "secondary" : "outline"}
-                  size="sm"
+                <button
+                  type="button"
                   onClick={() => void handleToggleFlag()}
                   className={cn(
-                    currentQuestion.isFlagged &&
-                      "border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                    "flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200",
+                    currentQuestion.isFlagged
+                      ? "border-amber-400/50 bg-amber-500/20 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                      : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20 hover:bg-white/[0.06] hover:text-white"
                   )}
                   aria-pressed={currentQuestion.isFlagged}
                 >
                   <Bookmark
                     className={cn(
-                      "h-4 w-4",
-                      currentQuestion.isFlagged ? "fill-amber-500 text-amber-500" : "text-muted-foreground"
+                      "h-3.5 w-3.5",
+                      currentQuestion.isFlagged ? "fill-amber-400 text-amber-400" : "text-slate-400"
                     )}
                   />
-                  {currentQuestion.isFlagged ? "Flagged for review" : "Flag for review"}
-                </Button>
+                  <span>{currentQuestion.isFlagged ? "Flagged for review" : "Flag for review"}</span>
+                </button>
               </div>
 
+              {/* Question Content & Radios */}
               <div className="flex-1 p-6 sm:p-8">
                 <MathRenderer
                   content={currentQuestion.renderedQuestion}
-                  className="mb-8 text-base leading-relaxed text-foreground sm:text-lg"
+                  className="exam-question exam-question-frame mb-8 text-white"
                 />
 
                 <RadioGroup
@@ -489,107 +520,133 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                     const isSelected = currentQuestion.selectedOption === option.key;
                     const revealCorrect = practiceAnswered && option.isCorrect;
                     const revealWrong = practiceAnswered && isSelected && !option.isCorrect;
+
                     return (
                       <RadioGroupItem
                         key={option.key}
                         value={option.key}
                         id={`option-${option.key}`}
                         className={cn(
-                          revealCorrect && "border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/20",
-                          revealWrong && "border-red-500 bg-red-50/80 dark:bg-red-950/20"
+                          revealCorrect &&
+                            "border-emerald-400/70 bg-emerald-600/20 shadow-[0_0_20px_rgba(16,185,129,0.3)]",
+                          revealWrong &&
+                            "border-red-400/70 bg-red-600/20 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
                         )}
                       >
                         <span
                           className={cn(
-                            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors",
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-mono text-xs font-black transition-[transform,background-color,border-color,box-shadow,color,opacity]",
                             isSelected
-                              ? "bg-primary text-primary-foreground ring-2 ring-primary/25"
-                              : "border border-border bg-muted text-muted-foreground"
+                              ? "bg-blue-600 text-white shadow-lg shadow-blue-500/40 ring-2 ring-blue-400/40"
+                              : "border border-white/10 bg-white/[0.05] text-slate-300 group-hover:border-white/20 group-hover:text-white"
                           )}
                         >
                           {option.key}
                         </span>
                         <MathRenderer
                           content={option.text}
-                          className="pt-0.5 text-sm font-medium text-foreground sm:text-base"
+                          className="pt-0.5 text-base font-medium leading-relaxed text-slate-100 tabular-nums"
                         />
                       </RadioGroupItem>
                     );
                   })}
                 </RadioGroup>
 
-                <div className="mt-6 flex flex-wrap items-center gap-2 border-t pt-5">
-                  <span className="mr-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                    <HelpCircle className="h-4 w-4" /> Confidence
+                {/* Confidence & Calculator Toggle Strip */}
+                <div className="mt-8 flex flex-wrap items-center gap-2.5 border-t border-white/[0.08] pt-6">
+                  <span className="mr-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+                    <HelpCircle className="h-4 w-4 text-blue-400" /> Confidence:
                   </span>
-                  {(["SURE", "UNSURE", "GUESS"] as const).map((confidence) => (
-                    <Button
-                      key={confidence}
-                      type="button"
-                      size="sm"
-                      variant={currentQuestion.confidence === confidence ? "default" : "outline"}
-                      onClick={() => void handleConfidence(confidence)}
-                      disabled={interactionLocked}
-                      aria-pressed={currentQuestion.confidence === confidence}
-                    >
-                      {confidence === "SURE" ? "Sure" : confidence === "UNSURE" ? "Unsure" : "Guess"}
-                    </Button>
-                  ))}
-                  <span className="mx-1 hidden h-6 w-px bg-border sm:block" />
-                  <Button
+                  {(["SURE", "UNSURE", "GUESS"] as const).map((confidence) => {
+                    const isConfidenceSelected = currentQuestion.confidence === confidence;
+                    return (
+                      <button
+                        key={confidence}
+                        type="button"
+                        onClick={() => void handleConfidence(confidence)}
+                        disabled={interactionLocked}
+                        aria-pressed={isConfidenceSelected}
+                        className={cn(
+                          "rounded-xl px-3 py-1.5 text-xs font-semibold transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200",
+                          isConfidenceSelected
+                            ? "border border-blue-400/50 bg-blue-600/25 text-white shadow-[0_0_12px_rgba(59,130,246,0.3)]"
+                            : "border border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200"
+                        )}
+                      >
+                        {confidence === "SURE" ? "Sure" : confidence === "UNSURE" ? "Unsure" : "Guess"}
+                      </button>
+                    );
+                  })}
+
+                  <span className="mx-1 hidden h-6 w-px bg-white/10 sm:block" />
+
+                  <button
                     type="button"
-                    size="sm"
-                    variant={currentQuestion.calculatorUsed ? "secondary" : "outline"}
                     onClick={() => void handleCalculatorUsed()}
                     disabled={interactionLocked}
                     aria-pressed={Boolean(currentQuestion.calculatorUsed)}
                     title="Self-report whether you used your approved calculator for this question"
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200",
+                      currentQuestion.calculatorUsed
+                        ? "border-sky-400/50 bg-sky-500/20 text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.25)]"
+                        : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-200"
+                    )}
                   >
-                    <Calculator className="h-4 w-4" />
-                    {currentQuestion.calculatorUsed ? "Calculator used" : "Mark calculator used"}
-                  </Button>
+                    <Calculator className="h-3.5 w-3.5" />
+                    <span>
+                      {currentQuestion.calculatorUsed ? "Calculator marked" : "Mark calculator used"}
+                    </span>
+                  </button>
                 </div>
 
+                {/* Practice Mode Instant Feedback Banner */}
                 {practiceAnswered && (
                   <div
                     className={cn(
-                      "mt-5 rounded-xl border p-4",
+                      "mt-6 rounded-2xl border p-5 shadow-xl",
                       selectedAnswer?.isCorrect
-                        ? "border-emerald-500/40 bg-emerald-500/10"
-                        : "border-red-500/40 bg-red-500/10"
+                        ? "border-emerald-500/40 bg-emerald-950/40 text-emerald-100"
+                        : "border-red-500/40 bg-red-950/40 text-red-100"
                     )}
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3.5">
                       {selectedAnswer?.isCorrect ? (
-                        <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" />
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
+                          <CheckCircle2 className="h-5 w-5" />
+                        </div>
                       ) : (
-                        <AlertTriangle className="mt-0.5 h-5 w-5 text-red-500" />
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/20 text-red-400">
+                          <AlertTriangle className="h-5 w-5" />
+                        </div>
                       )}
                       <div className="flex-1">
-                        <h3 className="font-bold">
-                          {selectedAnswer?.isCorrect ? "Correct" : "Not quite"}
+                        <h3 className="text-base font-bold text-white">
+                          {selectedAnswer?.isCorrect ? "Correct answer" : "Not quite correct"}
                         </h3>
                         {!selectedAnswer?.isCorrect && selectedAnswer?.distractorExplanation && (
                           <MathRenderer
                             content={selectedAnswer.distractorExplanation}
-                            className="mt-1 text-sm text-muted-foreground"
+                            className="mt-1 text-sm text-slate-300"
                           />
                         )}
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="mt-2 px-0"
+                          className="mt-3 text-xs text-sky-300 hover:text-white"
                           onClick={() => setShowPracticeSolution((shown) => !shown)}
                         >
-                          <Lightbulb className="h-4 w-4" />
-                          {showPracticeSolution ? "Hide worked solution" : "Show worked solution"}
+                          <Lightbulb className="h-3.5 w-3.5 text-amber-300" />
+                          {showPracticeSolution ? "Hide worked derivation" : "View step-by-step worked solution"}
                         </Button>
                         {showPracticeSolution && (
-                          <MathRenderer
-                            content={currentQuestion.solutionSteps}
-                            className="mt-3 border-t pt-3 text-sm leading-relaxed"
-                          />
+                          <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/80 p-4">
+                            <MathRenderer
+                              content={currentQuestion.solutionSteps}
+                              className="text-sm leading-relaxed text-slate-200"
+                            />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -597,20 +654,27 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                 )}
               </div>
 
-              <div className="flex items-center justify-between gap-3 border-t bg-muted/50 px-6 py-4">
-                <Button variant="outline" onClick={goToPrevious} disabled={currentIndex === 0}>
+              {/* Navigation Footer */}
+              <div className="flex items-center justify-between gap-3 border-t border-white/[0.08] bg-white/[0.02] px-6 py-4">
+                <Button
+                  variant="outline"
+                  onClick={goToPrevious}
+                  disabled={currentIndex === 0}
+                  className="border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/20"
+                >
                   <ChevronLeft className="h-4 w-4" />
                   Previous
                 </Button>
 
-                <span className="hidden text-xs text-muted-foreground sm:inline">
-                  Shortcuts: ← → to move, A–E to answer, F to flag
+                <span className="hidden text-xs text-slate-400 sm:inline">
+                  Shortcuts: <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px]">←</kbd> <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px]">→</kbd> to move · <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px]">A</kbd>–<kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px]">E</kbd> to answer · <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px]">F</kbd> to flag
                 </span>
 
                 <Button
                   variant="secondary"
                   onClick={goToNext}
                   disabled={currentIndex === totalQuestions - 1}
+                  className="border-white/10 bg-slate-800/80 hover:border-white/20"
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />
@@ -619,30 +683,30 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
             </Card>
           </section>
 
-          {/* ================= Question navigator ================= */}
+          {/* ================= Question Navigator Sidebar ================= */}
           <aside className="lg:col-span-1">
-            <Card className="p-5 lg:sticky lg:top-24">
-              <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <Card className="border-white/[0.09] bg-slate-900/75 p-5 shadow-2xl backdrop-blur-md lg:sticky lg:top-24">
+              <h2 className="mb-3.5 text-xs font-bold uppercase tracking-wider text-slate-400">
                 Question navigator
               </h2>
 
+              {/* Status summary pills */}
               <div className="mb-4 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg border border-success/30 bg-success/10 p-2">
-                  <div className="text-base font-extrabold text-success">{answeredCount}</div>
-                  <div className="text-[10px] font-semibold uppercase text-success">Answered</div>
+                <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-2 shadow-[0_0_12px_rgba(16,185,129,0.12)]">
+                  <div className="font-mono text-lg font-black text-emerald-300">{answeredCount}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Answered</div>
                 </div>
-                <div className="rounded-lg border border-warning/30 bg-warning/10 p-2">
-                  <div className="text-base font-extrabold text-warning">{flaggedCount}</div>
-                  <div className="text-[10px] font-semibold uppercase text-warning">Flagged</div>
+                <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-2 shadow-[0_0_12px_rgba(245,158,11,0.12)]">
+                  <div className="font-mono text-lg font-black text-amber-300">{flaggedCount}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Flagged</div>
                 </div>
-                <div className="rounded-lg border bg-muted p-2">
-                  <div className="text-base font-extrabold text-foreground">{unansweredCount}</div>
-                  <div className="text-[10px] font-semibold uppercase text-muted-foreground">
-                    Remaining
-                  </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-2">
+                  <div className="font-mono text-lg font-black text-slate-200">{unansweredCount}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Remaining</div>
                 </div>
               </div>
 
+              {/* Grid of question buttons */}
               <div className="grid grid-cols-5 gap-2">
                 {session.questions.map((question, index) => {
                   const isCurrent = index === currentIndex;
@@ -658,38 +722,39 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
                         question.isFlagged ? ", flagged" : ""
                       }`}
                       className={cn(
-                        "relative flex h-10 items-center justify-center rounded-lg border text-xs transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "relative flex h-10 items-center justify-center rounded-xl font-mono text-xs font-bold transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200",
                         isCurrent
-                          ? "border-primary bg-primary font-bold text-primary-foreground ring-2 ring-primary/30"
+                          ? "border border-blue-400/80 bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)] ring-2 ring-blue-400/40 scale-105"
                           : isAnswered
-                            ? "border-success bg-success font-medium text-success-foreground"
-                            : "border-border bg-card text-foreground hover:bg-accent"
+                            ? "border border-emerald-400/40 bg-emerald-600/30 text-emerald-200 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+                            : "border border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
                       )}
                     >
                       {index + 1}
                       {question.isFlagged && (
-                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-warning ring-2 ring-card" />
+                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-slate-900 shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
                       )}
                     </button>
                   );
                 })}
               </div>
 
-              <dl className="mt-5 space-y-1.5 border-t pt-4 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded bg-primary" />
+              {/* Legend */}
+              <dl className="mt-5 space-y-2 border-t border-white/[0.08] pt-4 text-xs text-slate-400">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-2.5 w-2.5 rounded bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
                   <span>Current question</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded bg-success" />
+                <div className="flex items-center gap-2.5">
+                  <span className="h-2.5 w-2.5 rounded bg-emerald-500/80 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
                   <span>Answered</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded border bg-card" />
+                <div className="flex items-center gap-2.5">
+                  <span className="h-2.5 w-2.5 rounded border border-white/20 bg-white/[0.05]" />
                   <span>Not answered</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full bg-warning" />
+                <div className="flex items-center gap-2.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
                   <span>Flagged for review</span>
                 </div>
               </dl>
@@ -697,55 +762,62 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
           </aside>
         </main>
 
-        {/* ================= Pause overlay ================= */}
+        {/* ================= Glass Pause Modal ================= */}
         <Dialog open={isPaused} onOpenChange={() => undefined}>
           <DialogContent
             hideCloseButton
-            className="max-w-md text-center"
+            className="max-w-md border-white/15 bg-slate-950/90 text-center backdrop-blur-md shadow-2xl"
             onEscapeKeyDown={(event) => event.preventDefault()}
             onInteractOutside={(event) => event.preventDefault()}
           >
             <DialogHeader className="items-center text-center sm:text-center">
-              <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-warning/15 text-warning">
+              <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-400/30 bg-amber-500/15 text-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.25)]">
                 <Pause className="h-8 w-8 fill-current" />
               </div>
-              <DialogTitle>Exam paused</DialogTitle>
-              <DialogDescription>
-                The clock is stopped and the questions are hidden. Resume whenever you are ready —
-                your answers and flags have been saved.
+              <DialogTitle className="text-xl font-black text-white">Exam paused</DialogTitle>
+              <DialogDescription className="text-sm text-slate-300">
+                The clock is stopped and the questions are hidden. Resume whenever you are ready — your answers and flags are saved.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="rounded-xl border bg-muted/60 p-3">
-              <div className="text-xs font-semibold uppercase text-muted-foreground">
+            <div className="my-2 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
                 Time remaining
               </div>
-              <div className="font-mono text-2xl font-bold tabular-nums text-foreground">
+              <div className="mt-1 font-mono text-3xl font-black tabular-nums text-white">
                 {formattedTime}
               </div>
             </div>
 
-            <Button size="lg" className="w-full" onClick={() => void handleTogglePause()} disabled={isSyncing}>
-              {isSyncing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5 fill-current" />}
+            <Button
+              size="lg"
+              className="w-full font-bold shadow-lg shadow-blue-500/25"
+              onClick={() => void handleTogglePause()}
+              disabled={isSyncing}
+            >
+              {isSyncing ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Play className="h-5 w-5 fill-current" />
+              )}
               Resume exam
             </Button>
           </DialogContent>
         </Dialog>
 
-        {/* ================= Submit confirmation ================= */}
+        {/* ================= Glass Submit Confirmation Modal ================= */}
         <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md border-white/15 bg-slate-950/90 backdrop-blur-md shadow-2xl">
             <DialogHeader>
-              <DialogTitle>Submit this exam?</DialogTitle>
-              <DialogDescription>
-                Submitting ends the sitting and produces your diagnostic report. You will not be able
-                to change your answers afterwards.
+              <DialogTitle className="text-xl font-black text-white">Submit this exam?</DialogTitle>
+              <DialogDescription className="text-sm text-slate-300">
+                Submitting ends your sitting and calculates your complete diagnostic report. You will not be able to change your answers afterwards.
               </DialogDescription>
             </DialogHeader>
 
             {unansweredCount > 0 && (
-              <div className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs">
-                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
+              <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                 <p>
                   <span className="font-bold">
                     {unansweredCount} question{unansweredCount === 1 ? " is" : "s are"} unanswered.
@@ -756,33 +828,38 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
             )}
 
             <div className="grid grid-cols-2 gap-3 text-center text-xs">
-              <div className="rounded-lg border bg-muted/60 p-2.5">
-                <span className="block text-muted-foreground">Answered</span>
-                <span className="text-base font-bold text-foreground">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <span className="block text-slate-400">Answered</span>
+                <span className="mt-1 font-mono text-lg font-black text-white">
                   {answeredCount} / {totalQuestions}
                 </span>
               </div>
-              <div className="rounded-lg border bg-muted/60 p-2.5">
-                <span className="block text-muted-foreground">Flagged</span>
-                <span className="text-base font-bold text-warning">{flaggedCount}</span>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <span className="block text-slate-400">Flagged</span>
+                <span className="mt-1 font-mono text-lg font-black text-amber-400">{flaggedCount}</span>
               </div>
             </div>
 
             {submitError && (
-              <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+              <p className="rounded-xl border border-destructive/40 bg-destructive/15 p-3 text-xs text-red-200">
                 {submitError}
               </p>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button
                 variant="ghost"
                 onClick={() => setShowSubmitDialog(false)}
                 disabled={isSubmitting}
+                className="text-slate-300 hover:text-white"
               >
                 Return to exam
               </Button>
-              <Button onClick={() => void submitExam()} disabled={isSubmitting}>
+              <Button
+                onClick={() => void submitExam()}
+                disabled={isSubmitting}
+                className="font-bold shadow-lg shadow-blue-500/25"
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -799,27 +876,27 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({ initialSession }) => {
           </DialogContent>
         </Dialog>
 
-        {/* ================= Time expired ================= */}
+        {/* ================= Time Expired Modal ================= */}
         <Dialog open={showTimeUpDialog} onOpenChange={() => undefined}>
-          <DialogContent hideCloseButton className="max-w-sm text-center">
+          <DialogContent hideCloseButton className="max-w-sm border-white/15 bg-slate-950/90 text-center backdrop-blur-md shadow-2xl">
             <DialogHeader className="items-center text-center sm:text-center">
-              <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+              <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl border border-destructive/40 bg-destructive/15 text-destructive">
                 <Clock className="h-7 w-7" />
               </div>
-              <DialogTitle>Time is up</DialogTitle>
-              <DialogDescription>
-                The {Math.round(session.durationSeconds / 60)}-minute limit has been reached. Your set is being submitted automatically.
+              <DialogTitle className="text-xl font-black text-white">Time is up</DialogTitle>
+              <DialogDescription className="text-sm text-slate-300">
+                The {Math.round(session.durationSeconds / 60)}-minute limit has been reached. Your sitting is being submitted automatically.
               </DialogDescription>
             </DialogHeader>
             {submitError ? (
-              <>
-                <p className="text-xs text-destructive">{submitError}</p>
-                <Button onClick={() => void submitExam()}>Try again</Button>
-              </>
+              <div className="space-y-3 pt-2">
+                <p className="text-xs text-red-300">{submitError}</p>
+                <Button onClick={() => void submitExam()} className="w-full">Try again</Button>
+              </div>
             ) : (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Grading your answers
+              <div className="flex items-center justify-center gap-2 pt-2 text-sm text-slate-300">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                Grading your answers...
               </div>
             )}
           </DialogContent>

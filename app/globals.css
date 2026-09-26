@@ -7,52 +7,56 @@
     --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-    /* Light surface — used by the CBT exam interface and the review report */
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 217 91% 45%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
-    --success: 160 84% 30%;
-    --success-foreground: 210 40% 98%;
-    --warning: 32 95% 44%;
-    --warning-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 45%;
-    --radius: 0.75rem;
-  }
-
-  .dark {
-    /* Dark surface — used by the marketing/landing shell and the CBT top bar */
-    --background: 222 47% 6%;
+    /* Base theme tokens */
+    --background: 222 47% 5%;
     --foreground: 210 40% 98%;
-    --card: 222 47% 9%;
+    --card: 222 47% 8%;
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 9%;
+    --popover: 222 47% 8%;
     --popover-foreground: 210 40% 98%;
     --primary: 217 91% 60%;
     --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 17%;
+    --secondary: 217 33% 15%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
+    --muted: 217 33% 14%;
+    --muted-foreground: 215 20% 68%;
+    --accent: 217 33% 18%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 45%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
-    --success: 160 84% 39%;
+    --success: 158 75% 42%;
+    --success-foreground: 222 47% 11%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+    --radius: 0.875rem;
+
+    /* Glass tokens */
+    --glass-bg: rgba(15, 23, 42, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-highlight: rgba(255, 255, 255, 0.12);
+  }
+
+  .dark {
+    --background: 222 47% 5%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 15%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 14%;
+    --muted-foreground: 215 20% 68%;
+    --accent: 217 33% 18%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 68% 48%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 158 75% 42%;
     --success-foreground: 222 47% 11%;
     --warning: 38 92% 50%;
     --warning-foreground: 222 47% 11%;
@@ -68,21 +72,164 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Ambient backdrop
+
+   A single static gradient layer replaces the previous stack of four
+   600px-wide elements carrying 140px blur filters. Large blur radii are
+   rasterised on the GPU and re-composited on every scroll and repaint, so
+   removing them is the single biggest win for scroll smoothness. The
+   gradient stops below reproduce the same soft blue/indigo/cyan wash.
+--------------------------------------------------------------------------- */
+.ambient-backdrop {
+  background-color: #080c15;
+  background-image:
+    radial-gradient(60rem 60rem at 8% -12%, rgba(37, 99, 235, 0.22), transparent 62%),
+    radial-gradient(64rem 64rem at 104% 22%, rgba(6, 182, 212, 0.16), transparent 62%),
+    radial-gradient(56rem 56rem at 26% 68%, rgba(147, 51, 234, 0.13), transparent 62%),
+    radial-gradient(52rem 52rem at 88% 104%, rgba(14, 165, 233, 0.16), transparent 62%),
+    radial-gradient(120% 80% at 50% 0%, rgba(30, 58, 138, 0.18), transparent 70%);
+}
+
+/* ---------------------------------------------------------------------------
+   Glassmorphic Utilities
+
+   Blur radii are kept deliberately modest (8–12px). Backdrop blur cost grows
+   with the radius, and past ~12px the extra softness is barely perceptible
+   over a dark background while the per-frame compositing cost keeps rising.
+   `saturate()` is omitted for the same reason: it forces an extra colour
+   matrix pass on every filtered layer.
+--------------------------------------------------------------------------- */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+}
+
+.glass-card,
+.glass-card-interactive {
+  background: rgba(17, 24, 39, 0.68);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  /* Only the properties that actually change on hover are transitioned.
+     `transition: all` forces the engine to watch every animatable property
+     and is a common source of jank on hover-heavy grids. */
+  transition:
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.22s ease,
+    background-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.glass-card-interactive:hover {
+  border-color: rgba(96, 165, 250, 0.35);
+  background-color: rgba(22, 33, 56, 0.78);
+  box-shadow: 0 16px 45px -8px rgba(0, 0, 0, 0.5), 0 0 25px -4px rgba(59, 130, 246, 0.2), inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
+  transform: translateY(-2px);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.glass-pill:hover {
+  background-color: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.glass-button-primary {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.92) 0%, rgba(30, 64, 175, 0.95) 100%);
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  box-shadow: 0 4px 22px rgba(37, 99, 235, 0.38), inset 0 1px 0 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.glass-button-primary:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.98) 0%, rgba(37, 99, 235, 1) 100%);
+  box-shadow: 0 8px 30px rgba(37, 99, 235, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.glass-button-primary:active {
+  transform: translateY(0.5px) scale(0.99);
+}
+
+.glass-glow-blue {
+  box-shadow: 0 0 35px -5px rgba(59, 130, 246, 0.25);
+}
+
+.glass-glow-cyan {
+  box-shadow: 0 0 35px -5px rgba(6, 182, 212, 0.25);
+}
+
+.glass-glow-emerald {
+  box-shadow: 0 0 35px -5px rgba(16, 185, 129, 0.25);
+}
+
+.glass-glow-amber {
+  box-shadow: 0 0 35px -5px rgba(245, 158, 11, 0.25);
+}
+
+/* ---------------------------------------------------------------------------
+   Graceful degradation
+
+   Where backdrop-filter is unsupported (or disabled for performance), the
+   translucent panels would otherwise show raw background through them. These
+   opaque fallbacks keep text legible without any filtering cost.
+--------------------------------------------------------------------------- */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-panel,
+  .glass-card,
+  .glass-card-interactive {
+    background: rgba(15, 23, 42, 0.94);
+  }
+
+  .glass-pill {
+    background: rgba(30, 41, 59, 0.9);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion
+
+   Honours the OS "reduce motion" setting and stops the infinite ambient
+   animations, which otherwise keep the compositor awake indefinitely.
+--------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
 /* ---------------------------------------------------------------------------
    KaTeX presentation
-   The renderer emits inline math inside flowing prose and display math inside
-   its own horizontally scrollable block, so long derivations never force the
-   page body to scroll sideways.
 --------------------------------------------------------------------------- */
 .katex-content .katex {
-  font-size: 1.05em;
+  font-size: 1.075em;
+  line-height: 1.35;
+  text-rendering: optimizeLegibility;
 }
 
 .katex-content .katex-display {
-  margin: 0.75em 0;
+  margin: 0;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0.15rem 0;
@@ -92,17 +239,60 @@
   white-space: nowrap;
 }
 
-/* KaTeX renders a parse error as a red-highlighted node; make it legible
-   instead of alarming when a template ships a malformed macro. */
 .katex-content .katex-error {
   color: hsl(var(--destructive));
   font-family: var(--font-mono);
   font-size: 0.875em;
 }
 
-/* Question and solution prose */
 .katex-content {
   line-height: 1.75;
+}
+
+.katex-content .math-display-frame {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid rgba(96, 165, 250, 0.75);
+  border-radius: 0.75rem;
+  /* Opaque rather than blurred: a display equation can appear dozens of times
+     per page, and one backdrop-filter layer per equation is a real cost. */
+  background: rgba(15, 23, 42, 0.72);
+  padding: 0.85rem 1rem;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+.katex-content .katex-paragraph-break {
+  display: block;
+  height: 0.9rem;
+}
+
+.exam-question {
+  max-width: 54rem;
+  font-family: var(--font-sans);
+  font-size: 1.065rem;
+  line-height: 1.8;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
+}
+
+.exam-question .katex {
+  font-size: 1.07em;
+}
+
+.exam-question-frame {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3.5px solid rgba(59, 130, 246, 0.85);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 1.35rem 1.45rem;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+@media (min-width: 640px) {
+  .exam-question-frame {
+    padding: 1.6rem 1.85rem;
+  }
 }
 
 .katex-content strong {
@@ -110,15 +300,21 @@
   color: hsl(var(--foreground));
 }
 
-/* Thin, unobtrusive scrollbars for the navigation and formula panels */
+/* ---------------------------------------------------------------------------
+   Modern Glass Scrollbars
+--------------------------------------------------------------------------- */
 .scrollbar-slim::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .scrollbar-slim::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--border));
+  background-color: rgba(255, 255, 255, 0.15);
   border-radius: 9999px;
+}
+
+.scrollbar-slim::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.28);
 }
 
 .scrollbar-slim::-webkit-scrollbar-track {

@@ -10,12 +10,14 @@ set -euo pipefail
 
 PORT="${EXAM_FM_PORT:-4173}"
 PIDFILE="$HOME/Library/Application Support/Exam FM Practice/server.pid"
+RUNNING_BUILD="$HOME/Library/Application Support/Exam FM Practice/running-build-id"
 
 listening() { nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; }
 ours() { curl -sf --max-time 3 "http://127.0.0.1:$PORT" 2>/dev/null | grep -q "Exam FM Practice"; }
 
 if ! listening; then
   rm -f "$PIDFILE"
+  rm -f "$RUNNING_BUILD"
   echo "It was not running."
   exit 0
 fi
@@ -32,6 +34,7 @@ if [ -f "$PIDFILE" ]; then
   kill "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null || true
   rm -f "$PIDFILE"
 fi
+rm -f "$RUNNING_BUILD"
 
 for _ in $(seq 1 10); do listening || break; sleep 1; done
 

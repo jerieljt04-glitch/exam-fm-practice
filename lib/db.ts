@@ -11,6 +11,7 @@ import {
 import { SEED_VARIABLE_KEY, examGenerator } from "./engine/generator";
 import { QUESTION_TEMPLATES, getTemplateById } from "./engine/templates";
 import { createRng } from "./engine/random";
+import { sampleExamQuestion } from "./engine/style";
 import { prisma } from "./prisma";
 import type {
   DomainMetric,
@@ -54,7 +55,6 @@ export interface CreateExamSessionOptions {
   domains?: TopicDomain[];
   difficulties?: DifficultyLevel[];
   isTimed?: boolean;
-  includeLegacy?: boolean;
   templateIds?: string[];
 }
 
@@ -154,7 +154,7 @@ function recoverSolution(row: {
   const seed = seedOf(row.variables);
   if (seed) {
     const replay = template.generate(createRng(seed));
-    if (replay.questionText === row.renderedQuestion) {
+    if (sampleExamQuestion(replay.questionText) === row.renderedQuestion) {
       return { solutionSteps: replay.solutionSteps, ...metadata };
     }
   }
@@ -196,14 +196,12 @@ export const examRepository = {
       ? EXAM_TOTAL_QUESTIONS
       : Math.max(1, Math.min(30, options.totalQuestions ?? 10));
     const isTimed = mode === "EXAM" ? true : (options.isTimed ?? false);
-    const includeLegacy = mode !== "EXAM" && Boolean(options.includeLegacy);
     const sessionId = `exam_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const questions = examGenerator.generateFullExam({
       sessionId,
       totalQuestions,
       difficulties: options.difficulties,
       domains: options.domains,
-      includeLegacy,
       templateIds: options.templateIds,
       useSyllabusWeights: mode === "EXAM",
     });
@@ -222,7 +220,6 @@ export const examRepository = {
       isTimed,
       immediateFeedback: mode !== "EXAM",
       formulaSheetEnabled: mode !== "EXAM",
-      includeLegacy,
       status: "IN_PROGRESS",
       questions,
     };
@@ -338,7 +335,6 @@ export const examRepository = {
           isTimed: cached?.isTimed ?? true,
           immediateFeedback: cached?.immediateFeedback ?? false,
           formulaSheetEnabled: cached?.formulaSheetEnabled ?? false,
-          includeLegacy: cached?.includeLegacy ?? false,
           status: row.status as ExamSessionData["status"],
           questions,
         };

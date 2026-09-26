@@ -137,6 +137,12 @@ export function mistakeTemplateIds(history: StudyHistory): string[] {
     .map((record) => record.templateId);
 }
 
+/** The topics of the given templates, in blueprint order, for a review that has to fall back to topics. */
+export function reviewDomains(history: StudyHistory, templateIds: readonly string[]): TopicDomain[] {
+  const wanted = new Set(templateIds.map((id) => history.mastery[id]?.domain).filter(Boolean));
+  return DOMAIN_ORDER.filter((domain) => wanted.has(domain));
+}
+
 export function domainMastery(history: StudyHistory): Array<{
   domain: TopicDomain;
   label: string;

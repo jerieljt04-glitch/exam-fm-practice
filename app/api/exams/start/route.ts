@@ -15,7 +15,6 @@ export async function POST(req: Request) {
       domains?: TopicDomain[];
       difficulties?: DifficultyLevel[];
       isTimed?: boolean;
-      includeLegacy?: boolean;
       templateIds?: string[];
     };
     const userId = typeof body.userId === "string" && body.userId ? body.userId : "candidate-1";
@@ -37,7 +36,6 @@ export async function POST(req: Request) {
       domains,
       difficulties,
       isTimed: body.isTimed,
-      includeLegacy: body.includeLegacy,
       templateIds: Array.isArray(body.templateIds)
         ? body.templateIds.filter((id): id is string => typeof id === "string").slice(0, 30)
         : undefined,

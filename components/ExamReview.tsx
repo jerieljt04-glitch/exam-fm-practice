@@ -12,6 +12,7 @@ import {
   Calculator,
   MinusCircle,
   RotateCcw,
+  Sparkles,
   XCircle,
 } from "lucide-react";
 
@@ -42,16 +43,16 @@ interface ExamReviewProps {
 type QuestionFilter = "ALL" | "INCORRECT" | "CORRECT" | "UNANSWERED" | "FLAGGED";
 
 const STATUS_STYLES: Record<ProficiencyStatus, { badge: string; bar: string; label: string }> = {
-  MASTERED: { badge: "bg-success/10 text-success border-success/30", bar: "bg-success", label: "Mastered" },
-  ADEQUATE: { badge: "bg-primary/10 text-primary border-primary/30", bar: "bg-primary", label: "Adequate" },
+  MASTERED: { badge: "bg-emerald-500/15 text-emerald-300 border-emerald-400/30", bar: "bg-emerald-500", label: "Mastered" },
+  ADEQUATE: { badge: "bg-blue-500/15 text-blue-300 border-blue-400/30", bar: "bg-blue-500", label: "Adequate" },
   NEEDS_IMPROVEMENT: {
-    badge: "bg-warning/10 text-warning border-warning/30",
-    bar: "bg-warning",
+    badge: "bg-amber-500/15 text-amber-300 border-amber-400/30",
+    bar: "bg-amber-500",
     label: "Needs work",
   },
   CRITICAL: {
-    badge: "bg-destructive/10 text-destructive border-destructive/30",
-    bar: "bg-destructive",
+    badge: "bg-red-500/15 text-red-300 border-red-400/30",
+    bar: "bg-red-500",
     label: "Critical",
   },
 };
@@ -158,79 +159,91 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
   }, [questions]);
 
   return (
-    <div className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
+    <div className="min-h-screen px-4 py-8 sm:px-6 sm:py-12 lg:px-8 selection:bg-blue-500/30 selection:text-white">
       <div className="mx-auto max-w-6xl space-y-8">
-        {/* ================= Scorecard ================= */}
+        {/* ================= Glass Scorecard Banner ================= */}
         <section
           className={cn(
-            "rounded-2xl border p-6 text-slate-100 shadow-lg sm:p-8",
+            // Static banner: nothing here changes state, so no transition is declared.
+            "relative overflow-hidden rounded-3xl border p-6 shadow-2xl sm:p-9",
             isPassed
-              ? "border-emerald-700/50 bg-gradient-to-br from-emerald-950 via-emerald-900 to-slate-950"
-              : "border-slate-800 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-950"
+              ? "border-emerald-500/40 bg-slate-900/60 shadow-[0_0_50px_rgba(16,185,129,0.15)]"
+              : "border-blue-500/40 bg-slate-900/60 shadow-[0_0_50px_rgba(59,130,246,0.15)]"
           )}
         >
+          {/* Ambient glow accent inside scorecard, drawn as a radial gradient
+              rather than a blurred element so it costs nothing to repaint. */}
+          <div
+            className={cn(
+              "pointer-events-none absolute -right-16 -top-16 h-72 w-72 rounded-full",
+              isPassed
+                ? "bg-[radial-gradient(circle,rgba(5,150,105,0.28),transparent_70%)]"
+                : "bg-[radial-gradient(circle,rgba(37,99,235,0.28),transparent_70%)]"
+            )}
+          />
+
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-            <div className="space-y-2">
-              <span className="inline-flex rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider">
-                {reviewData.mode === "EXAM" ? "Mock exam report" : "Practice set report"}
+            <div className="space-y-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-200">
+                <Sparkles className="h-3.5 w-3.5" />
+                {reviewData.mode === "EXAM" ? "Mock Exam Diagnostic Report" : "Practice Set Diagnostic Report"}
               </span>
-              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
-                {isPassed
-                  ? "Above the practice benchmark"
-                  : "Below the practice benchmark"}
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+                {isPassed ? "Above the practice benchmark" : "Below the practice benchmark"}
               </h1>
-              <p className="max-w-xl text-sm text-slate-300">
+              <p className="max-w-xl text-sm leading-relaxed text-slate-300">
                 This platform marks {benchmarkMark} of {totalQuestions} correct ({Math.round(PASS_RATIO * 100)}%)
-                as its benchmark. The SOA does not publish a fixed pass mark for Exam FM, so treat
-                this as a study signal rather than a prediction.
+                as its study benchmark. The SOA does not publish a static pass mark for Exam FM, so treat
+                this as a rigorous calibration metric rather than a prediction.
               </p>
             </div>
 
-            <div className="flex items-center gap-5 self-stretch rounded-xl border border-white/10 bg-white/5 p-4 md:self-auto">
+            {/* Scorecard Metric Block */}
+            <div className="flex items-center gap-6 self-stretch rounded-2xl border border-white/15 bg-white/[0.04] p-5 md:self-auto shadow-inner">
               <div className="text-center">
-                <div className="font-mono text-4xl font-black tabular-nums tracking-tight">
+                <div className="font-mono text-4xl font-black tabular-nums tracking-tight text-white">
                   {correctCount}
                   <span className="text-lg font-normal text-slate-400">/{totalQuestions}</span>
                 </div>
-                <div className="mt-0.5 text-xs font-semibold uppercase tracking-wider text-slate-300">
+                <div className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-400">
                   Correct
                 </div>
               </div>
 
-              <div className="h-10 w-px bg-white/10" />
+              <div className="h-12 w-px bg-white/15" />
 
               <div className="text-center">
-                <div className="font-mono text-4xl font-black tabular-nums tracking-tight text-blue-300">
+                <div className="font-mono text-4xl font-black tabular-nums tracking-tight text-sky-300">
                   {scorePercent}
                   <span className="text-lg font-normal text-slate-400">%</span>
                 </div>
-                <div className="mt-0.5 text-xs font-semibold uppercase tracking-wider text-slate-300">
+                <div className="mt-1 text-xs font-bold uppercase tracking-wider text-slate-400">
                   Score
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 border-t border-white/10 pt-6 text-xs sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex items-center gap-2">
+          <div className="mt-8 grid grid-cols-1 gap-4 border-t border-white/10 pt-6 text-xs sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex items-center gap-2.5">
               <Award className={cn("h-4 w-4", isPassed ? "text-emerald-400" : "text-amber-400")} />
-              <span className="text-slate-300">Benchmark:</span>
-              <span className={cn("font-bold", isPassed ? "text-emerald-300" : "text-amber-300")}>
+              <span className="text-slate-400">Benchmark:</span>
+              <span className={cn("font-bold text-sm", isPassed ? "text-emerald-300" : "text-amber-300")}>
                 {isPassed ? "Met" : "Not met"}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <Clock className="h-4 w-4 text-blue-400" />
-              <span className="text-slate-300">Active time:</span>
-              <span className="font-semibold text-white">{formatDuration(totalTimeSpentSeconds)}</span>
+              <span className="text-slate-400">Active time:</span>
+              <span className="font-mono font-bold text-white text-sm">{formatDuration(totalTimeSpentSeconds)}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <Clock className="h-4 w-4 text-amber-400" />
-              <span className="text-slate-300">Paused:</span>
-              <span className="font-semibold text-white">{formatDuration(totalPausedTimeSeconds)}</span>
+              <span className="text-slate-400">Paused time:</span>
+              <span className="font-mono font-bold text-white text-sm">{formatDuration(totalPausedTimeSeconds)}</span>
             </div>
             <div className="flex items-center sm:justify-end">
-              <Button asChild variant="secondary" size="sm" className="bg-white/10 text-white hover:bg-white/20">
+              <Button asChild variant="secondary" size="sm" className="border-white/15 bg-white/10 text-white hover:bg-white/20">
                 <Link href="/">
                   <RotateCcw className="h-3.5 w-3.5" />
                   Start a new exam
@@ -240,69 +253,68 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
           </div>
         </section>
 
-        {/* ================= Calculator analytics ================= */}
-        <Card className="p-6">
-          <div className="mb-4 flex items-start gap-3">
-            <span className="rounded-lg bg-primary/10 p-2 text-primary">
+        {/* ================= Calculator Analytics ================= */}
+        <Card className="border-white/[0.08] bg-slate-900/60 p-6 shadow-xl">
+          <div className="mb-5 flex items-start gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-400/30 bg-blue-500/15 text-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.2)]">
               <Calculator className="h-5 w-5" />
-            </span>
+            </div>
             <div>
-              <h2 className="text-lg font-bold">Calculator analytics</h2>
-              <p className="text-xs text-muted-foreground">
-                Based on the calculator-use marks you recorded while answering.
+              <h2 className="text-lg font-bold text-white">Calculator analytics</h2>
+              <p className="text-xs text-slate-400">
+                Performance correlation based on self-reported calculator marks during the exam.
               </p>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3.5 sm:grid-cols-2">
             {[
               { label: "Calculator used", metric: calculatorAnalytics.used },
               { label: "No calculator marked", metric: calculatorAnalytics.notUsed },
             ].map(({ label, metric }) => (
-              <div key={label} className="rounded-xl border bg-muted/30 p-4">
-                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              <div key={label} className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   {label} · {metric.count} question{metric.count === 1 ? "" : "s"}
                 </div>
-                <div className="mt-2 flex items-baseline gap-5">
+                <div className="mt-2.5 flex items-baseline gap-6">
                   <div>
-                    <span className="font-mono text-2xl font-black">
+                    <span className="font-mono text-3xl font-black text-white">
                       {metric.accuracy === null ? "—" : `${metric.accuracy}%`}
                     </span>
-                    <span className="ml-1 text-xs text-muted-foreground">accuracy</span>
+                    <span className="ml-1.5 text-xs text-slate-400">accuracy</span>
                   </div>
                   <div>
-                    <span className="font-mono text-lg font-bold">
+                    <span className="font-mono text-xl font-bold text-slate-200">
                       {metric.averageSeconds === null ? "—" : formatDuration(metric.averageSeconds)}
                     </span>
-                    <span className="ml-1 text-xs text-muted-foreground">avg.</span>
+                    <span className="ml-1.5 text-xs text-slate-400">avg time</span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-            This is self-reported because the app cannot detect keystrokes on a physical calculator.
-            Use the comparison to spot problems where calculator setup is slowing you down or causing errors.
+          <p className="mt-3.5 text-[11px] leading-relaxed text-slate-400">
+            Self-reported indicator for personal calibration. Use the comparison to pinpoint topics where calculator mechanics may be causing delays or errors.
           </p>
         </Card>
 
-        {/* ================= Domain diagnostics ================= */}
-        <Card className="p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        {/* ================= Domain Diagnostics ================= */}
+        <Card className="border-white/[0.08] bg-slate-900/60 p-6 shadow-xl">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold">Performance by syllabus domain</h2>
-              <p className="text-xs text-muted-foreground">
-                Select a domain to filter the question review below.
+              <h2 className="text-lg font-bold text-white">Performance by syllabus domain</h2>
+              <p className="text-xs text-slate-400">
+                Select any domain tile to filter the detailed question review below.
               </p>
             </div>
             {weakestDomain && weakestDomain.percentage < 70 && (
-              <Badge variant="warning" className="gap-1.5">
+              <Badge variant="warning" className="gap-1.5 font-semibold">
                 <AlertTriangle className="h-3 w-3" />
                 Focus next on {weakestDomain.label}
               </Badge>
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3 lg:grid-cols-5">
             {activeDomains.map((domain) => {
               const metric = domainMetrics[domain];
               if (!metric) return null;
@@ -316,21 +328,23 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
                   onClick={() => setSelectedDomain(isSelected ? "ALL" : domain)}
                   aria-pressed={isSelected}
                   className={cn(
-                    "rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    isSelected ? "border-primary bg-primary/5 shadow-sm" : "bg-muted/40 hover:border-primary/40"
+                    "rounded-2xl border p-4 text-left transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                    isSelected
+                      ? "border-blue-400/80 bg-blue-600/15 shadow-[0_0_20px_rgba(59,130,246,0.25)] ring-1 ring-blue-400/40"
+                      : "border-white/[0.07] bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
                   )}
                 >
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <span className="text-xs font-bold leading-tight">{metric.label}</span>
-                    <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-bold", styles.badge)}>
+                  <div className="mb-2.5 flex items-start justify-between gap-2">
+                    <span className="text-xs font-bold leading-tight text-white">{metric.label}</span>
+                    <span className={cn("rounded-md border px-1.5 py-0.5 text-[10px] font-bold", styles.badge)}>
                       {styles.label}
                     </span>
                   </div>
-                  <div className="mb-1.5 flex items-baseline justify-between">
-                    <span className="font-mono text-xl font-extrabold tabular-nums">
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <span className="font-mono text-2xl font-black tabular-nums text-white">
                       {metric.percentage}%
                     </span>
-                    <span className="font-mono text-xs text-muted-foreground">
+                    <span className="font-mono text-xs text-slate-400">
                       {metric.correct}/{metric.total}
                     </span>
                   </div>
@@ -341,41 +355,41 @@ export const ExamReview: React.FC<ExamReviewProps> = ({ reviewData }) => {
           </div>
         </Card>
 
-        {/* ================= Question review ================= */}
+        {/* ================= Question Review ================= */}
         <div className="space-y-4">
-          <Card className="flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center">
+          <Card className="flex flex-col items-start justify-between gap-3 border-white/[0.08] bg-slate-900/60 p-4 shadow-xl sm:flex-row sm:items-center">
             <Tabs value={filter} onValueChange={(value) => setFilter(value as QuestionFilter)}>
               <TabsList>
                 <TabsTrigger value="ALL">All ({totalQuestions})</TabsTrigger>
                 <TabsTrigger value="INCORRECT">
-                  <XCircle className="h-3.5 w-3.5" />
+                  <XCircle className="h-3.5 w-3.5 text-red-400" />
                   Incorrect ({incorrectCount})
                 </TabsTrigger>
                 <TabsTrigger value="CORRECT">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
                   Correct ({correctCount})
                 </TabsTrigger>
                 <TabsTrigger value="UNANSWERED">
-                  <MinusCircle className="h-3.5 w-3.5" />
+                  <MinusCircle className="h-3.5 w-3.5 text-amber-400" />
                   Unanswered ({unansweredCount})
                 </TabsTrigger>
                 <TabsTrigger value="FLAGGED">
-                  <Bookmark className="h-3.5 w-3.5" />
+                  <Bookmark className="h-3.5 w-3.5 text-amber-400" />
                   Flagged ({flaggedCount})
                 </TabsTrigger>
               </TabsList>
             </Tabs>
 
             {selectedDomain !== "ALL" && (
-              <Button variant="link" size="sm" onClick={() => setSelectedDomain("ALL")}>
-                Clear domain filter
+              <Button variant="link" size="sm" onClick={() => setSelectedDomain("ALL")} className="text-xs text-blue-400 hover:text-blue-300">
+                Clear domain filter ({DOMAIN_LABELS[selectedDomain as keyof typeof DOMAIN_LABELS] ?? selectedDomain})
               </Button>
             )}
           </Card>
 
           {filteredQuestions.length === 0 ? (
-            <Card className="p-10 text-center text-sm text-muted-foreground">
-              No questions match the current filters.
+            <Card className="border-white/[0.08] bg-slate-900/60 p-12 text-center text-sm text-slate-400">
+              No questions match the current filter selection.
             </Card>
           ) : (
             <Accordion type="multiple" defaultValue={defaultOpen} className="space-y-4">
@@ -410,21 +424,23 @@ function QuestionReviewItem({
   return (
     <Card
       className={cn(
-        "overflow-hidden",
-        question.isCorrect ? "border-border" : "border-destructive/30"
+        "overflow-hidden border shadow-xl transition-[transform,background-color,border-color,box-shadow,color,opacity] duration-200",
+        question.isCorrect
+          ? "border-white/[0.08] bg-slate-900/60"
+          : "border-red-500/30 bg-slate-900/60"
       )}
     >
       <AccordionItem value={question.id} className="border-b-0">
-        <AccordionTrigger className="px-5 hover:no-underline">
-          <div className="flex items-center gap-3 text-left">
+        <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-white/[0.02]">
+          <div className="flex items-center gap-3.5 text-left">
             <span
               className={cn(
-                "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full",
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl",
                 question.isCorrect
-                  ? "bg-success/15 text-success"
+                  ? "border border-emerald-400/30 bg-emerald-500/15 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
                   : isUnanswered
-                    ? "bg-warning/15 text-warning"
-                    : "bg-destructive/15 text-destructive"
+                    ? "border border-amber-400/30 bg-amber-500/15 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                    : "border border-red-400/30 bg-red-500/15 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.2)]"
               )}
             >
               {question.isCorrect ? (
@@ -437,14 +453,14 @@ function QuestionReviewItem({
             </span>
 
             <div>
-              <div className="mb-0.5 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold">Question {questionNumber}</span>
-                <span className="text-muted-foreground">•</span>
-                <Badge variant="muted" className="text-[10px]">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-white">Question {questionNumber}</span>
+                <span className="text-white/20">•</span>
+                <Badge variant="outline" className="border-blue-400/25 bg-blue-500/10 text-[10px] text-blue-300">
                   {DOMAIN_LABELS[question.domain]}
                 </Badge>
                 <Badge
-                  variant={question.difficulty >= 3 ? "warning" : "outline"}
+                  variant={question.difficulty >= 3 ? "warning" : "muted"}
                   className="text-[10px]"
                 >
                   {DIFFICULTY_LABELS[question.difficulty]}
@@ -456,37 +472,39 @@ function QuestionReviewItem({
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-300">
                 {isUnanswered ? (
-                  <span className="font-semibold text-warning">Not answered</span>
+                  <span className="font-semibold text-amber-400">Not answered</span>
                 ) : (
                   <>
                     Your answer:{" "}
-                    <strong className={question.isCorrect ? "text-success" : "text-destructive"}>
-                      {question.selectedOption}
+                    <strong className={question.isCorrect ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
+                      Option {question.selectedOption}
                     </strong>
                   </>
                 )}
                 {" · "}
-                Correct answer: <strong className="text-success">{correctOption?.key}</strong>
+                Correct answer: <strong className="text-emerald-400 font-bold">Option {correctOption?.key}</strong>
               </p>
             </div>
           </div>
         </AccordionTrigger>
 
-        <AccordionContent className="space-y-6 border-t bg-muted/30 px-6 pt-6">
-          <section className="rounded-xl border bg-card p-5">
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        <AccordionContent className="space-y-6 border-t border-white/[0.08] bg-slate-950/40 px-6 pt-6">
+          {/* Question Prompt */}
+          <section className="rounded-2xl border border-white/[0.08] bg-slate-900/50 p-5">
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
               Question
             </h3>
             <MathRenderer
               content={question.renderedQuestion}
-              className="text-base leading-relaxed"
+              className="exam-question exam-question-frame text-white"
             />
           </section>
 
+          {/* Options Display */}
           <section className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
               Answer choices
             </h3>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -497,27 +515,27 @@ function QuestionReviewItem({
                   <div
                     key={option.key}
                     className={cn(
-                      "flex items-start justify-between gap-3 rounded-xl border p-4",
+                      "flex items-start justify-between gap-3 rounded-2xl border p-4 transition-[transform,background-color,border-color,box-shadow,color,opacity]",
                       option.isCorrect
-                        ? "border-success/50 bg-success/5"
+                        ? "border-emerald-400/50 bg-emerald-950/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]"
                         : isUserChoice
-                          ? "border-destructive/50 bg-destructive/5"
-                          : "bg-card"
+                          ? "border-red-400/50 bg-red-950/30 shadow-[0_0_15px_rgba(239,68,68,0.15)]"
+                          : "border-white/[0.07] bg-white/[0.02]"
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] font-mono text-xs font-bold text-white">
                         {option.key}
                       </span>
-                      <MathRenderer content={option.text} className="text-sm font-medium" />
+                      <MathRenderer content={option.text} className="text-sm font-medium text-slate-100" />
                     </div>
                     {option.isCorrect ? (
-                      <Badge variant="success" className="flex-shrink-0 text-[10px]">
+                      <Badge variant="success" className="shrink-0 text-[10px]">
                         <CheckCircle2 className="h-3 w-3" />
                         Correct
                       </Badge>
                     ) : isUserChoice ? (
-                      <Badge variant="destructive" className="flex-shrink-0 text-[10px]">
+                      <Badge variant="destructive" className="shrink-0 text-[10px]">
                         <XCircle className="h-3 w-3" />
                         Your answer
                       </Badge>
@@ -528,63 +546,67 @@ function QuestionReviewItem({
             </div>
           </section>
 
+          {/* Distractor Explanation */}
           {!question.isCorrect && selectedOption?.distractorExplanation && (
-            <section className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-4">
-              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
+            <section className="flex items-start gap-3.5 rounded-2xl border border-amber-500/40 bg-amber-950/30 p-5">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
               <div>
-                <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-warning">
+                <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-300">
                   Why option {selectedOption.key} is wrong —{" "}
                   {DISTRACTOR_LABELS[selectedOption.distractorType ?? ""] ?? "Common error"}
                 </h3>
                 <MathRenderer
                   content={selectedOption.distractorExplanation}
-                  className="text-sm leading-relaxed"
+                  className="text-sm leading-relaxed text-amber-100"
                 />
               </div>
             </section>
           )}
 
-          <section className="mb-2 space-y-3 rounded-xl border bg-card p-6">
-            <div className="flex items-center gap-2 border-b pb-2">
-              <BookOpen className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-bold">Step-by-step solution</h3>
+          {/* Worked Solution */}
+          <section className="mb-2 space-y-3 rounded-2xl border border-white/[0.08] bg-slate-900/50 p-6">
+            <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+              <BookOpen className="h-4 w-4 text-blue-400" />
+              <h3 className="text-sm font-bold text-white">Step-by-step worked solution</h3>
             </div>
             {question.objective && (
               <>
-                <p className="text-xs text-muted-foreground">{question.objective}</p>
+                <p className="text-xs text-slate-300">{question.objective}</p>
                 {question.topics.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">
+                  <p className="text-xs text-slate-400">
+                    <span className="font-semibold text-white">
                       {question.steps} interdependent step{question.steps === 1 ? "" : "s"}
                     </span>{" "}
                     across {question.topics.map((topic) => TOPIC_LABELS[topic]).join(" + ")}.
                   </p>
                 )}
-                <Separator />
+                <Separator className="bg-white/10 my-2" />
               </>
             )}
-            <MathRenderer content={question.solutionSteps} className="text-sm leading-relaxed" />
+            <MathRenderer content={question.solutionSteps} className="text-sm leading-relaxed text-slate-200" />
           </section>
 
+          {/* Study Aids (Timeline + Calculator) */}
           <QuestionStudyAids question={question} />
 
-          <section className="grid gap-3 rounded-xl border bg-muted/30 p-4 sm:grid-cols-3">
+          {/* Timing & Calibration Strip */}
+          <section className="grid gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 sm:grid-cols-3">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Time on question
               </div>
-              <div className="mt-1 font-mono text-sm font-bold">
+              <div className="mt-1 font-mono text-sm font-bold text-white">
                 {formatDuration(question.timeSpentSeconds ?? 0)}
                 {(question.timeSpentSeconds ?? 0) > 300 && (
-                  <span className="ml-2 font-sans text-xs font-normal text-warning">Above 5-minute pace</span>
+                  <span className="ml-2 font-sans text-xs font-normal text-amber-400">Above 5-minute pace</span>
                 )}
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Confidence calibration
               </div>
-              <div className="mt-1 text-sm font-bold">
+              <div className="mt-1 text-sm font-bold text-white">
                 {question.confidence === "SURE"
                   ? "Sure"
                   : question.confidence === "UNSURE"
@@ -593,19 +615,19 @@ function QuestionReviewItem({
                       ? "Guess"
                       : "Not recorded"}
                 {question.confidence === "SURE" && !question.isCorrect && (
-                  <span className="ml-2 text-xs font-normal text-warning">Priority misconception</span>
+                  <span className="ml-2 text-xs font-normal text-amber-400">Priority misconception</span>
                 )}
                 {question.confidence === "GUESS" && question.isCorrect && (
-                  <span className="ml-2 text-xs font-normal text-primary">Review despite correct answer</span>
+                  <span className="ml-2 text-xs font-normal text-blue-400">Review despite correct answer</span>
                 )}
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Calculator use
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Calculator marker
               </div>
-              <div className="mt-1 text-sm font-bold">
-                {question.calculatorUsed ? "Used" : "Not marked"}
+              <div className="mt-1 text-sm font-bold text-white">
+                {question.calculatorUsed ? "Calculator marked" : "No calculator marked"}
               </div>
             </div>
           </section>

@@ -199,3 +199,13 @@ export function parseMarkup(source: string): MarkupNode[] {
 
   return nodes;
 }
+
+/**
+ * Clean up math-only number punctuation that occasionally leaks into prose in
+ * older or hand-authored question text (for example, `2{,}718.80`). Apply this
+ * only to plain-text nodes in the UI; actual inline/display math is left intact
+ * for KaTeX to render.
+ */
+export function normalizePlainMathText(value: string): string {
+  return value.replace(/(\d)\\?\{,\}(?=\d)/g, "$1,");
+}

@@ -24,6 +24,20 @@ export function num(value: number, decimals = 2): string {
   });
 }
 
+/**
+ * A number the way the SOA sample set prints it: grouping commas only from
+ * 10,000 upward (`4695`, `1302.50`, `20,689`, `1,000,000`), and a negative
+ * figure led by an en dash (`–1,398`).
+ */
+export function soaNumber(value: number, decimals = 0): string {
+  if (!Number.isFinite(value)) return "0";
+  const rounded = Math.abs(value).toFixed(decimals);
+  const [whole, fraction] = rounded.split(".");
+  const grouped = whole.length >= 5 ? whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") : whole;
+  const sign = value < 0 && Number(rounded) !== 0 ? "–" : "";
+  return `${sign}${grouped}${fraction !== undefined ? `.${fraction}` : ""}`;
+}
+
 /** Whole number with thousands separators: `160,000`. */
 export function int(value: number): string {
   if (!Number.isFinite(value)) return "0";

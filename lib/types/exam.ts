@@ -76,7 +76,6 @@ export interface ExamSessionData {
   isTimed: boolean;
   immediateFeedback: boolean;
   formulaSheetEnabled: boolean;
-  includeLegacy: boolean;
   status: ExamStatus;
   questions: ExamQuestionData[];
 }

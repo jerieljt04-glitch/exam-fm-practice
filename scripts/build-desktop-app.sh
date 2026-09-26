@@ -80,6 +80,7 @@ URL="http://127.0.0.1:$PORT"
 LOG="$HOME/Library/Logs/exam-fm-practice.log"
 STATE="$HOME/Library/Application Support/Exam FM Practice"
 PIDFILE="$STATE/server.pid"
+RUNNING_BUILD="$STATE/running-build-id"
 mkdir -p "$(dirname "$LOG")" "$STATE"
 
 # A GUI launch inherits almost no PATH, so borrow the login shell's.
@@ -106,6 +107,14 @@ stale() {
             -newer .next/BUILD_ID -type f -print -quit 2>/dev/null)" ]
 }
 
+# A source build can be newer than the server already running on this port.
+# Remember which BUILD_ID that server loaded so a later double-click refreshes it.
+build_changed() {
+  [ ! -f .next/BUILD_ID ] && return 0
+  [ ! -f "$RUNNING_BUILD" ] && return 0
+  [ "$(cat "$RUNNING_BUILD")" != "$(cat .next/BUILD_ID)" ]
+}
+
 # `npm start` forks a child that renames itself to "next-server", so neither
 # process is findable by the command line used to launch it. Kill the recorded
 # npm pid, then whatever still holds the port.
@@ -124,7 +133,7 @@ stop_server() {
 # not re-run a running app's executable when its Dock icon is clicked, and this
 # app has no window to activate.
 if alive; then
-  if stale; then
+  if stale || build_changed; then
     # New code has landed since the running server started; replace it rather
     # than silently serving the previous build.
     echo "sources are newer than the running build; restarting" >> "$LOG"
@@ -157,6 +166,7 @@ nohup npm start -- --port "$PORT" >> "$LOG" 2>&1 &
 SERVER_PID=$!
 disown "$SERVER_PID" 2>/dev/null || true
 echo "$SERVER_PID" > "$PIDFILE"
+cp .next/BUILD_ID "$RUNNING_BUILD"
 
 for _ in $(seq 1 90); do
   alive && break
@@ -184,6 +194,12 @@ if [ "$INSTALL" = "1" ]; then
   cp -R "$STAGING" "$INSTALL_DIR/$APP_NAME.app"
   touch "$INSTALL_DIR/$APP_NAME.app"
   echo "  installed: $INSTALL_DIR/$APP_NAME.app"
+  DESKTOP_LINK="$HOME/Desktop/$APP_NAME.app"
+  if [ -L "$DESKTOP_LINK" ]; then rm -f "$DESKTOP_LINK"; fi
+  if [ ! -e "$DESKTOP_LINK" ]; then
+    ln -s "$INSTALL_DIR/$APP_NAME.app" "$DESKTOP_LINK"
+    echo "  shortcut : $DESKTOP_LINK"
+  fi
 fi
 
 echo "Done."

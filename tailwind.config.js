@@ -79,11 +79,21 @@ module.exports = {
           from: { opacity: "0", transform: "scale(0.98)" },
           to: { opacity: "1", transform: "scale(1)" },
         },
+        "pulse-glow": {
+          "0%, 100%": { opacity: "0.6", transform: "scale(1)" },
+          "50%": { opacity: "0.9", transform: "scale(1.03)" },
+        },
+        "shimmer": {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.15s ease-out forwards",
+        "pulse-glow": "pulse-glow 4s ease-in-out infinite",
+        "shimmer": "shimmer 3s linear infinite",
       },
     },
   },

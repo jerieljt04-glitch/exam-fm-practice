@@ -34,6 +34,7 @@ const instances = QUESTION_TEMPLATES.flatMap((template) =>
       kind: item.kind === "CHOICE" ? "CHOICE" : "NUMERIC",
       question: item.questionText,
       solution: item.solutionSteps,
+      vars: item.variables,
       options: question.renderedOptions.map((o) => ({
         k: o.key,
         text: o.text,
@@ -47,10 +48,18 @@ const instances = QUESTION_TEMPLATES.flatMap((template) =>
     return {
       ...base,
       format: item.format,
-      vars: item.variables,
       correct: item.correctValue,
       correctLabel: formatAnswer(item.correctValue, item.format),
-      distractors: item.distractors.map((d: any) => d.value),
+      // The distractors that actually appear as options, after the generator has
+      // dropped any that collided or were implausible and added its backstop.
+      // Checking the raw template list instead would flag collisions the reader
+      // never sees.
+      distractors: question.renderedOptions
+        .filter((o) => !o.isCorrect)
+        .map((o) => Number(String(o.text).replace("–", "-").replace(/[^0-9.eE+-]/g, "")))
+        .filter((v) => Number.isFinite(v)),
+      // Retained for reference: the raw modelled mistakes before filtering.
+      rawDistractors: item.distractors.map((d: any) => d.value),
     };
   })
 );

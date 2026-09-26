@@ -16,11 +16,15 @@ const Progress = React.forwardRef<
 >(({ className, value, indicatorClassName, ...props }, ref) => (
   <ProgressPrimitive.Root
     ref={ref}
-    className={cn("relative h-2 w-full overflow-hidden rounded-full bg-secondary", className)}
+    className={cn("relative h-2 w-full overflow-hidden rounded-full bg-white/[0.08]", className)}
     {...props}
   >
     <ProgressPrimitive.Indicator
-      className={cn("h-full w-full flex-1 rounded-full bg-primary transition-all", indicatorClassName)}
+      className={cn(
+        // The fill is driven by translateX, so only `transform` needs to animate.
+        "h-full w-full flex-1 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-transform duration-300 ease-out shadow-[0_0_12px_rgba(59,130,246,0.3)]",
+        indicatorClassName
+      )}
       style={{ transform: `translateX(-${100 - (value ?? 0)}%)` }}
     />
   </ProgressPrimitive.Root>

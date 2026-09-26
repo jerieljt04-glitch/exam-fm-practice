@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import { InlineMath, BlockMath } from "react-katex";
 
 import { cn } from "@/lib/utils";
-import { parseMarkup, type Emphasis } from "@/lib/math/markup";
+import { normalizePlainMathText, parseMarkup, type Emphasis } from "@/lib/math/markup";
 
 interface MathRendererProps {
   /** Authored markup — see `lib/math/markup.ts` for the supported dialect. */
@@ -44,7 +44,7 @@ function withEmphasis(child: React.ReactNode, emphasis: Emphasis, key: string): 
  * is injected as raw HTML, so question text loaded from the database cannot
  * inject markup into the exam interface.
  */
-export const MathRenderer: React.FC<MathRendererProps> = ({ content, className }) => {
+const MathRendererImpl: React.FC<MathRendererProps> = ({ content, className }) => {
   const nodes = useMemo(() => (content ? parseMarkup(content) : []), [content]);
 
   return (
@@ -54,11 +54,17 @@ export const MathRenderer: React.FC<MathRendererProps> = ({ content, className }
 
         switch (node.type) {
           case "break":
+            // Two source newlines mark a paragraph boundary. Render that as a
+            // controlled block gap instead of two browser-dependent <br>s.
+            if (nodes[index - 1]?.type === "break") return null;
+            if (nodes[index + 1]?.type === "break") {
+              return <span key={key} className="katex-paragraph-break" aria-hidden="true" />;
+            }
             return <br key={key} />;
 
           case "display":
             return (
-              <div key={key} className="scrollbar-slim my-3 overflow-x-auto py-1 text-center">
+              <div key={key} className="math-display-frame scrollbar-slim text-center">
                 <BlockMath
                   math={node.value}
                   renderError={() => <MathError expression={node.value} />}
@@ -74,11 +80,22 @@ export const MathRenderer: React.FC<MathRendererProps> = ({ content, className }
             );
 
           default:
-            return withEmphasis(node.value, node, key);
+            return withEmphasis(normalizePlainMathText(node.value), node, key);
         }
       })}
     </div>
   );
 };
+
+/**
+ * Memoised so that a parent re-render with unchanged `content` and `className`
+ * skips the whole parse-and-typeset pass. This matters a great deal in the exam
+ * runner, where the countdown clock re-renders its parent once per second: the
+ * question stem and every answer choice would otherwise be re-parsed and
+ * re-typeset by KaTeX on each tick.
+ */
+export const MathRenderer = React.memo(MathRendererImpl);
+
+MathRenderer.displayName = "MathRenderer";
 
 export default MathRenderer;

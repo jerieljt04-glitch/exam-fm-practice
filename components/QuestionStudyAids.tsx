@@ -77,50 +77,52 @@ export function QuestionStudyAids({ question }: { question: ExamQuestionData }) 
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card className="p-5">
+      <Card className="border-white/[0.08] bg-slate-900/60 p-5">
         <div className="mb-5 flex items-center gap-2">
-          <GitCommitHorizontal className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-bold">Cash-flow map</h3>
+          <GitCommitHorizontal className="h-4 w-4 text-blue-400" />
+          <h3 className="text-sm font-bold text-white">Cash-flow map</h3>
         </div>
         <div className="relative grid grid-cols-3 gap-3 text-center">
-          <div className="absolute left-[16%] right-[16%] top-3 h-0.5 bg-border" />
+          <div className="absolute left-[16%] right-[16%] top-3 h-0.5 bg-gradient-to-r from-blue-500/40 via-indigo-500/40 to-sky-500/40" />
           {[
             { time: "t = 0", label: timeline.start },
             { time: "…", label: timeline.middle },
             { time: horizonLabel(question), label: timeline.end },
           ].map((point) => (
             <div key={point.time} className="relative">
-              <span className="mx-auto mb-2 block h-6 w-6 rounded-full border-4 border-card bg-primary" />
-              <div className="font-mono text-xs font-bold text-primary">{point.time}</div>
-              <div className="mt-1 text-[11px] leading-snug text-muted-foreground">{point.label}</div>
+              <span className="mx-auto mb-2 block h-6 w-6 rounded-full border-4 border-slate-900 bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.5)]" />
+              <div className="font-mono text-xs font-bold text-blue-400">{point.time}</div>
+              <div className="mt-1 text-[11px] leading-snug text-slate-300">{point.label}</div>
             </div>
           ))}
         </div>
       </Card>
 
-      <Card className="p-5">
+      <Card className="border-white/[0.08] bg-slate-900/60 p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Calculator className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-bold">{calculator.title}</h3>
+            <Calculator className="h-4 w-4 text-indigo-400" />
+            <h3 className="text-sm font-bold text-white">{calculator.title}</h3>
           </div>
-          <Badge variant="muted">Optional check</Badge>
+          <Badge variant="outline" className="text-[10px] uppercase text-slate-300">Optional check</Badge>
         </div>
         {isConceptual ? (
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-slate-300">
             This item tests recognition rather than calculator mechanics. State the governing relationship before evaluating any numbers.
           </p>
         ) : (
-          <ol className="grid gap-2 text-xs text-muted-foreground">
+          <ol className="grid gap-2 text-xs text-slate-300">
             {calculator.steps.map((step, index) => (
-              <li key={step} className="flex gap-2">
-                <span className="font-mono font-bold text-primary">{index + 1}.</span>
-                <span>{step}</span>
+              <li key={step} className="flex gap-2.5">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-blue-400/30 bg-blue-500/15 font-mono text-[10px] font-bold text-blue-300">
+                  {index + 1}
+                </span>
+                <span className="pt-0.5">{step}</span>
               </li>
             ))}
           </ol>
         )}
-        <p className="mt-3 border-t pt-3 text-[10px] leading-relaxed text-muted-foreground">
+        <p className="mt-3 border-t border-white/10 pt-3 text-[10px] leading-relaxed text-slate-400">
           Practice on your own approved calculator. This guide is a study aid and is hidden during strict Exam Mode.
         </p>
       </Card>

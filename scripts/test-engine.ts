@@ -12,17 +12,23 @@
 import katex from "katex";
 
 import {
-  DEFAULT_DIFFICULTIES,
   DOMAIN_QUESTION_RANGES,
   DOMAIN_ORDER,
+  EXAM_ADVANCED_COUNTS,
+  EXAM_CONCEPTUAL_QUESTIONS,
   EXAM_TOTAL_QUESTIONS,
+  EXAM_DIFFICULTIES,
   MIN_ADVANCED_STEPS,
   OPTION_KEYS,
-  isCurrentSyllabusTemplate,
 } from "../lib/exam-config";
 import { examGenerator } from "../lib/engine/generator";
 import { createRng } from "../lib/engine/random";
-import { QUESTION_TEMPLATES, TEMPLATES_BY_DOMAIN } from "../lib/engine/templates";
+import {
+  QUESTION_TEMPLATES,
+  TEMPLATES_BY_DOMAIN,
+  getTemplateById,
+  isConceptualTemplate,
+} from "../lib/engine/templates";
 import { examRepository } from "../lib/db";
 import { parseMarkup } from "../lib/math/markup";
 import type { ExamQuestionData } from "../lib/types/exam";
@@ -149,24 +155,59 @@ function checkQuestion(question: ExamQuestionData, index: number): void {
   });
 }
 
+/**
+ * Options print the way the SOA sample set prints them: bare numbers with no
+ * currency symbol, grouping commas only from 10,000 upward, percentages with a
+ * trailing % sign, and numeric options in ascending order.
+ */
+function checkSampleStyleOptions(question: ExamQuestionData, index: number): void {
+  const label = `Q${index + 1} [${question.templateId}]`;
+  const texts = question.renderedOptions.map((option) => option.text);
+  // `$` delimits math in option markup, so only the prose outside it is checked.
+  check(
+    texts.every((text) => !/[$£€]/.test(text.replace(/\$[^$]*\$/g, ""))),
+    `${label}: an option carries a currency symbol`
+  );
+  const numeric = texts.every((text) => /^[–-]?[\d,]+(\.\d+)?%?$/.test(text));
+  if (!numeric) return;
+  for (const text of texts) {
+    const digits = text.replace(/[–\-%]/g, "").split(".")[0];
+    const whole = Number(digits.replace(/,/g, ""));
+    check(
+      whole >= 10000 ? /^\d{1,3}(,\d{3})+$/.test(digits) : !digits.includes(","),
+      `${label}: option "${text}" does not follow the sample set's comma convention`
+    );
+  }
+  const values = texts.map((text) => Number(text.replace(/,/g, "").replace("–", "-").replace("%", "")));
+  check(
+    values.every((value, k) => k === 0 || value > values[k - 1]),
+    `${label}: numeric options are not in ascending order (${texts.join(" | ")})`
+  );
+}
+
 async function run(): Promise<void> {
   section("1. Template library");
   console.log(`  Templates: ${QUESTION_TEMPLATES.length}`);
   check(
-    QUESTION_TEMPLATES.length >= 100,
-    `The larger bank must contain at least 100 templates (found ${QUESTION_TEMPLATES.length})`
+    QUESTION_TEMPLATES.length >= 180,
+    `The bank must contain at least 180 templates (found ${QUESTION_TEMPLATES.length})`
   );
   for (const domain of DOMAIN_ORDER) {
     const count = TEMPLATES_BY_DOMAIN[domain].length;
     console.log(`  ${domain}: ${count}`);
+    check(count >= 25, `${domain} has only ${count} templates; each topic needs at least 25 for variety`);
+  }
+  // Every question type is traceable to the SOA sample questions it is modelled on.
+  for (const template of QUESTION_TEMPLATES) {
+    check(template.id.startsWith("FM_"), `${template.id}: template ids use the FM_ prefix`);
     check(
-      count >= DOMAIN_QUESTION_RANGES[domain].max,
-      `${domain} has ${count} templates but the blueprint may draw ${DOMAIN_QUESTION_RANGES[domain].max}`
+      (template.soaSamples?.length ?? 0) > 0,
+      `${template.id}: must name the SOA sample questions its type is modelled on`
     );
   }
 
   section("2. Generated exams (markup, options, blueprint)");
-  const EXAM_COUNT = 25;
+  const EXAM_COUNT = 100;
   for (let attempt = 0; attempt < EXAM_COUNT; attempt += 1) {
     const questions = examGenerator.generateFullExam({
       sessionId: `test-session-${attempt}`,
@@ -178,11 +219,34 @@ async function run(): Promise<void> {
       questions.length === EXAM_TOTAL_QUESTIONS,
       `Exam ${attempt}: produced ${questions.length} questions, expected ${EXAM_TOTAL_QUESTIONS}`
     );
-
-    const templateIds = questions.map((question) => question.templateId);
     check(
-      new Set(templateIds).size === templateIds.length,
-      `Exam ${attempt}: the same template appears more than once in a single sitting`
+      new Set(questions.map((question) => question.templateId)).size === questions.length,
+      `Exam ${attempt}: repeated a question-solving template within the same test`
+    );
+
+    // Distinct template ids are not enough. Two templates can share a method,
+    // which is the derivation a candidate actually performs, so an exam built
+    // from both would read as repetitive even though the wording and the
+    // numbers differ. The generator refuses such a pairing, and this is the
+    // assertion that keeps it that way.
+    const methodCounts = new Map<string, number>();
+    for (const question of questions) {
+      const definition = getTemplateById(question.templateId);
+      const fingerprint = definition?.methodFingerprint ?? question.templateId;
+      methodCounts.set(fingerprint, (methodCounts.get(fingerprint) ?? 0) + 1);
+    }
+    const repeatedMethods: string[] = [];
+    methodCounts.forEach((count, fingerprint) => {
+      if (count > 1) repeatedMethods.push(`${fingerprint} (${count}x)`);
+    });
+    check(
+      repeatedMethods.length === 0,
+      `Exam ${attempt}: repeated a solving method within the same test: ${repeatedMethods.join(", ")}`
+    );
+    const conceptualCount = questions.filter((question) => isConceptualTemplate(question)).length;
+    check(
+      conceptualCount <= EXAM_CONCEPTUAL_QUESTIONS,
+      `Exam ${attempt}: drew ${conceptualCount} qualitative items, at most ${EXAM_CONCEPTUAL_QUESTIONS} are allowed`
     );
 
     const domainCounts = new Map<string, number>();
@@ -198,27 +262,99 @@ async function run(): Promise<void> {
       );
     }
 
-    // Standard exams use only current-syllabus material and keep a mix of
-    // direct, intermediate, and synthesis work.
     check(
-      questions.every((question) => isCurrentSyllabusTemplate(question.topics)),
-      `Exam ${attempt}: current Exam Mode included a retired topic`
+      questions.every((question) =>
+        /(?:^|\n\n)(?:Calculate|Determine|Which|[A-Z][^\n]*?,\s(?:calculate|determine))\b/.test(question.renderedQuestion)
+      ),
+      `Exam ${attempt}: a prompt does not place its instruction on a separate sample-style line`
     );
+    // A sitting must span difficulties rather than running at one level: every
+    // domain meets its level 3+ quota, and the paper still keeps direct items.
     for (const domain of DOMAIN_ORDER) {
       const inDomain = questions.filter((question) => question.domain === domain);
       check(
-        inDomain.every((question) => DEFAULT_DIFFICULTIES.includes(question.difficulty)),
-        `Exam ${attempt}: ${domain} drew a question outside the default difficulty range`
+        inDomain.every((question) => EXAM_DIFFICULTIES.includes(question.difficulty)),
+        `Exam ${attempt}: ${domain} drew a question outside the eligible difficulty range`
+      );
+      const advanced = inDomain.filter((question) => question.difficulty >= 3);
+      check(
+        advanced.length >= Math.min(EXAM_ADVANCED_COUNTS[domain], inDomain.length),
+        `Exam ${attempt}: ${domain} drew ${advanced.length} level 3+ items, expected ${EXAM_ADVANCED_COUNTS[domain]}`
       );
       check(
-        inDomain.some((question) => question.difficulty <= 2),
-        `Exam ${attempt}: ${domain} did not include any direct/intermediate item`
+        advanced.every((question) => question.steps >= MIN_ADVANCED_STEPS),
+        `Exam ${attempt}: ${domain} included a level 3+ item with fewer than ${MIN_ADVANCED_STEPS} linked stages`
       );
     }
+    const advancedTotal = questions.filter((question) => question.difficulty >= 3).length;
+    check(
+      advancedTotal >= 10 && advancedTotal <= EXAM_TOTAL_QUESTIONS - 8,
+      `Exam ${attempt}: ${advancedTotal} of ${EXAM_TOTAL_QUESTIONS} items are level 3+, which is not a mixed paper`
+    );
 
     questions.forEach(checkQuestion);
+    questions.forEach(checkSampleStyleOptions);
   }
   console.log(`  Checked ${EXAM_COUNT * EXAM_TOTAL_QUESTIONS} generated questions.`);
+
+  section("2a. Answer position is not predictable");
+  // Options are printed in ascending numeric order, so the position of the key
+  // is decided by how many distractors fall below the correct value. A template
+  // with symmetric distractors used to put the answer in the same slot on every
+  // draw, which produced practice sets where every correct answer was C.
+  const positionCounts: Record<string, number> = {};
+  for (const key of OPTION_KEYS) positionCounts[key] = 0;
+  const positionByTemplate = new Map<string, Record<string, number>>();
+  let positioned = 0;
+
+  // More sittings than the markup pass: per-template position counts need
+  // enough draws that a 60% cap is a real signal rather than sampling noise.
+  const POSITION_EXAMS = 400;
+  for (let attempt = 0; attempt < POSITION_EXAMS; attempt += 1) {
+    const questions = examGenerator.generateFullExam({
+      sessionId: `position-${attempt}`,
+      seed: `position-${attempt}`,
+    });
+    for (const question of questions) {
+      const index = question.renderedOptions.findIndex((option) => option.isCorrect);
+      const key = OPTION_KEYS[index];
+      positionCounts[key] += 1;
+      positioned += 1;
+
+      if (!positionByTemplate.has(question.templateId)) {
+        const fresh: Record<string, number> = {};
+        for (const optionKey of OPTION_KEYS) fresh[optionKey] = 0;
+        positionByTemplate.set(question.templateId, fresh);
+      }
+      positionByTemplate.get(question.templateId)![key] += 1;
+    }
+  }
+
+  // Every letter must be reachable, and none may dominate the paper.
+  for (const key of OPTION_KEYS) {
+    const share = positionCounts[key] / positioned;
+    check(
+      share >= 0.12 && share <= 0.28,
+      `Answer position ${key} holds ${(share * 100).toFixed(1)}% of correct answers, expected 12-28%`
+    );
+  }
+
+  // A single template must not pin its answer to one letter either; that is the
+  // failure mode that made a whole Loans practice set come back all-C.
+  for (const [templateId, counts] of Array.from(positionByTemplate.entries())) {
+    const draws = OPTION_KEYS.reduce((sum, key) => sum + counts[key], 0);
+    if (draws < 25) continue;
+    const highest = Math.max(...OPTION_KEYS.map((key) => counts[key]));
+    check(
+      highest / draws <= 0.6,
+      `Template ${templateId} put ${((highest / draws) * 100).toFixed(0)}% of its correct answers in one slot`
+    );
+  }
+  console.log(
+    `  ${positioned} answers spread across ${OPTION_KEYS.map(
+      (key) => `${key}:${((positionCounts[key] / positioned) * 100).toFixed(1)}%`
+    ).join(" ")}`
+  );
 
   section("2b. Template self-verification");
   let assertionCount = 0;
@@ -228,8 +364,8 @@ async function run(): Promise<void> {
 
       if (template.difficulty >= 3) {
         check(
-          template.steps >= MIN_ADVANCED_STEPS && template.topics.length >= 2,
-          `${template.id}: level ${template.difficulty} items must chain ${MIN_ADVANCED_STEPS}+ steps across 2+ syllabus areas`
+          template.steps >= MIN_ADVANCED_STEPS,
+          `${template.id}: level ${template.difficulty} items must chain ${MIN_ADVANCED_STEPS}+ steps`
         );
         const stageHeadings = item.solutionSteps.match(/\*\*Step \d+/g) ?? [];
         check(
@@ -344,6 +480,60 @@ async function run(): Promise<void> {
   });
   check(practice.questions.length === 5, "A custom practice set must honor its question count");
   check(practice.questions.every((question) => question.domain === "ANNUITIES"), "A custom set must honor its domain filter");
+
+  // A targeted study set must contain the chosen subject and nothing else. The
+  // guard runs over every domain, at several set sizes and across the full
+  // difficulty range, because the leak this replaced only appeared once a set
+  // was large enough to exhaust the obvious templates for a subject.
+  const DOMAIN_TOPIC_TAGS: Record<string, string[]> = {
+    TIME_VALUE_OF_MONEY: ["TIME_VALUE"],
+    ANNUITIES: ["TIME_VALUE"],
+    LOANS: ["LOAN_MECHANICS"],
+    BONDS: ["BONDS_AND_CURVES"],
+    ALM_IMMUNIZATION: ["GENERAL_CASH_FLOWS", "IMMUNIZATION"],
+  };
+  for (const domain of DOMAIN_ORDER) {
+    for (const size of [5, 10, 15, 30]) {
+      const set = examGenerator.generateFullExam({
+        sessionId: `targeted-${domain}-${size}`,
+        totalQuestions: size,
+        domains: [domain],
+        difficulties: [1, 2, 3, 4],
+        seed: `targeted-${domain}-${size}`,
+      });
+      const strays = set.filter((question) => question.domain !== domain);
+      check(
+        strays.length === 0,
+        `A ${size}-question ${domain} set drew ${strays.length} question(s) from ${Array.from(
+          new Set(strays.map((question) => question.domain))
+        ).join(", ")}`
+      );
+      const offTopic = set.filter(
+        (question) => !question.topics.some((topic) => DOMAIN_TOPIC_TAGS[domain].includes(topic))
+      );
+      check(
+        offTopic.length === 0,
+        `A ${size}-question ${domain} set drew ${offTopic.length} item(s) not tagged with its own syllabus area`
+      );
+    }
+  }
+
+  // Selecting two subjects must admit both and still exclude the other three.
+  const pair = examGenerator.generateFullExam({
+    sessionId: "targeted-pair",
+    totalQuestions: 20,
+    domains: ["LOANS", "BONDS"],
+    difficulties: [1, 2, 3, 4],
+    seed: "targeted-pair",
+  });
+  check(
+    pair.every((question) => question.domain === "LOANS" || question.domain === "BONDS"),
+    "A two-subject set must draw only from the two selected subjects"
+  );
+  check(
+    new Set(pair.map((question) => question.domain)).size === 2,
+    "A two-subject set must draw from both selected subjects, not just one"
+  );
   check(practice.immediateFeedback && practice.formulaSheetEnabled && !practice.isTimed, "Practice Mode must enable teaching aids and allow untimed work");
 
   const endTime = review.endTime;
@@ -352,6 +542,33 @@ async function run(): Promise<void> {
   check(
     revisited?.endTime === endTime,
     "Revisiting the review must not re-close the exam or move the end time"
+  );
+
+  section("4a. Review of retired templates");
+  // A study history can name templates that have since been retired from the
+  // bank. Reviewing it must still produce a set, drawn from the same topics.
+  const fallback = examGenerator.generateFullExam({
+    sessionId: "retired-review",
+    totalQuestions: 6,
+    templateIds: ["ANNUITY_RETIRED_EXAMPLE", "BOND_RETIRED_EXAMPLE"],
+    domains: ["ANNUITIES", "BONDS"],
+    seed: "retired-review",
+  });
+  check(fallback.length === 6, `A review of retired templates must still produce its set (got ${fallback.length})`);
+  check(
+    fallback.every((question) => question.domain === "ANNUITIES" || question.domain === "BONDS"),
+    "A review of retired templates must stay on the reviewed topics"
+  );
+  const mixed = examGenerator.generateFullExam({
+    sessionId: "mixed-review",
+    totalQuestions: 4,
+    templateIds: ["FM_LOAN_BALANCE_AFTER_K", "LOAN_RETIRED_EXAMPLE"],
+    domains: ["LOANS"],
+    seed: "mixed-review",
+  });
+  check(
+    mixed.every((question) => question.templateId === "FM_LOAN_BALANCE_AFTER_K"),
+    "A review keeps the templates that still exist and skips retired ones"
   );
 
   section("5. Answers always register");

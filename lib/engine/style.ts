@@ -1,5 +1,5 @@
 import type { Rng } from "./random";
-import { pct } from "./format";
+import { mathPct, pct } from "./format";
 
 /**
  * House style for question prose, matched to the SOA Exam FM sample questions.
@@ -70,4 +70,50 @@ export function nominalRate(
 /** `at an annual force of interest of 0.055` */
 export function forceOfInterest(delta: number): string {
   return `an annual force of interest of ${delta}`;
+}
+
+/**
+ * "a 8-year loan" reads as "a eight-year loan"; numbers spoken with a leading
+ * vowel sound (8, 11, 18, 80-89, 11,000, 18,500 ...) take "an".
+ */
+export function withArticles(text: string): string {
+  return text
+    .replace(/\b([Aa]) (?=(?:8[\d,.]*|1[18](?:,\d{3})*)(?!\d))/g, "$1n ")
+    .replace(/\b([Aa]) (?=(?:eight|eleven|eighteen)\b)/g, "$1n ");
+}
+
+/**
+ * Gives every prompt the same visual cadence as the published sample set:
+ * compact declarative givens, followed by a clear blank line and a standalone
+ * instruction. The content remains original and parameterized.
+ */
+export function sampleExamQuestion(source: string): string {
+  const lines = withArticles(source)
+    .trim()
+    .split("\n")
+    .map((line) => line.trimEnd());
+  // The instruction either opens its line ("Calculate X.") or follows a lead-in
+  // clause, as the sample set often writes it ("Using an annual effective
+  // interest rate of 10%, calculate the Macaulay duration of the stock.").
+  const taskIndex = lines.findIndex((line) =>
+    /^(Calculate|Determine|Which)\b|^[A-Z][^\n]*?,\s(calculate|determine)\b/.test(line.trim())
+  );
+
+  if (taskIndex <= 0) return lines.join("\n");
+
+  const givens = lines.slice(0, taskIndex).join("\n").trimEnd();
+  const task = lines.slice(taskIndex).join("\n").trim();
+  return `${givens}\n\n${task}`;
+}
+
+/** A compact term-structure table matching the data-first layout of the sample questions. */
+export function sampleSpotRateTable(spots: readonly number[]): string {
+  const maturities = spots.map((_, index) => index + 1).join(" & ");
+  const rates = spots.map((spot) => mathPct(spot)).join(" & ");
+  return `You are given the following annual effective spot rates:
+$$\\begin{array}{c|${"c".repeat(spots.length)}}
+\\text{Maturity in years} & ${maturities} \\\\
+\\hline
+\\text{Spot rate} & ${rates}
+\\end{array}$$`;
 }
