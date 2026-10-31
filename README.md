@@ -106,7 +106,8 @@ duration/convexity/Redington, arithmetic-versus-geometric and free-form cash-flo
 
 ## How questions are generated and validated
 
-The bank has 47 parameterised templates (96 template × difficulty combinations), including eight
+The bank has 52 parameterised templates (101 template × difficulty combinations), including five
+single-formula templates for the level-1 share of formula practice and eight
 formula-integration templates (bond price → forward rate, an unknown refinancing rate, an
 equivalent level annuity, a payoff between payment dates, a business valued as a growing stream,
 two annuities solved simultaneously, growing deposits every few years, and a price change built
@@ -131,7 +132,7 @@ A draft that fails any check is regenerated with a new seed; a template that can
 flagged and skipped. Nothing unvalidated reaches a session, and every question stores its
 validation record (shown at the foot of each question review).
 
-`npm run test:sympy` additionally re-derives a sample of the bank (288 questions) in Python with SymPy at 40-digit
+`npm run test:sympy` additionally re-derives a sample of the bank (303 questions) in Python with SymPy at 40-digit
 precision — every option, every displayed rounding, and the equation of value — independently of
 the TypeScript engine.
 

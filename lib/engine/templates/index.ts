@@ -5,6 +5,7 @@ import { ALM_TEMPLATES } from "./alm";
 import { ANNUITY_TEMPLATES } from "./annuities";
 import { BOND_TEMPLATES } from "./bonds";
 import { INTEGRATED_TEMPLATES } from "./integrated";
+import { SINGLE_TEMPLATES } from "./single";
 import { LOAN_TEMPLATES } from "./loans";
 import { TVM_TEMPLATES } from "./tvm";
 
@@ -16,6 +17,7 @@ export const TEMPLATES: QuestionTemplate[] = [
   ...BOND_TEMPLATES,
   ...ALM_TEMPLATES,
   ...INTEGRATED_TEMPLATES,
+  ...SINGLE_TEMPLATES,
 ];
 
 export const TEMPLATE_BY_ID: Record<string, QuestionTemplate> = Object.fromEntries(
