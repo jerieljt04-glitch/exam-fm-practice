@@ -1,101 +1,65 @@
+import type { AnswerFormat } from "./types";
+
 /**
- * Formatting helpers for authored question markup.
+ * Number formatting for question text and answer choices.
  *
- * Monetary amounts are written the way the SOA writes them in the Exam FM
- * sample questions: as bare numbers with no currency symbol. That is both the
- * house style of the exam and the reason the markup tokenizer can no longer
- * confuse a price with an inline-math delimiter — the class of bug that once
- * turned `the $12^{\text{th}} payment` into literal LaTeX on screen.
- *
- * Two flavours exist for each quantity:
- *   `money()`     — for prose, outside `$ ... $`.
- *   `mathMoney()` — for use *inside* a math expression, where digit grouping
- *                   must be written `{,}` so KaTeX does not add comma spacing.
+ * Amounts are written as bare numbers, the way the SOA sample set writes them,
+ * so a price can never be mistaken for an inline-math delimiter.
  */
 
-const LOCALE = "en-US";
-
-/** Fixed-decimal number with thousands separators: `12,345.68`. */
+/** Grouped number for prose: `12,345.68`. */
 export function num(value: number, decimals = 2): string {
-  if (!Number.isFinite(value)) return "0";
-  return value.toLocaleString(LOCALE, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-}
-
-/**
- * A number the way the SOA sample set prints it: grouping commas only from
- * 10,000 upward (`4695`, `1302.50`, `20,689`, `1,000,000`), and a negative
- * figure led by an en dash (`–1,398`).
- */
-export function soaNumber(value: number, decimals = 0): string {
-  if (!Number.isFinite(value)) return "0";
-  const rounded = Math.abs(value).toFixed(decimals);
-  const [whole, fraction] = rounded.split(".");
-  const grouped = whole.length >= 5 ? whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") : whole;
-  const sign = value < 0 && Number(rounded) !== 0 ? "–" : "";
+  if (!Number.isFinite(value)) return "—";
+  const fixed = Math.abs(value).toFixed(decimals);
+  const [whole, fraction] = fixed.split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const sign = value < 0 && Number(fixed) !== 0 ? "−" : "";
   return `${sign}${grouped}${fraction !== undefined ? `.${fraction}` : ""}`;
 }
 
-/** Whole number with thousands separators: `160,000`. */
-export function int(value: number): string {
-  if (!Number.isFinite(value)) return "0";
-  return Math.round(value).toLocaleString(LOCALE);
+/** The same number, safe inside `$ ... $`. */
+export function mnum(value: number, decimals = 2): string {
+  return num(value, decimals).replace(/,/g, "{,}").replace("−", "-");
 }
 
-/** An amount in prose, exam style: `money(1250.5)` -> `1,250.50`. */
-export function money(value: number, decimals = 2): string {
-  return num(value, decimals);
+/** A whole amount when whole, otherwise to the cent: `2500`, `1302.50`. */
+export function amt(value: number): string {
+  return num(value, Math.abs(value - Math.round(value)) < 1e-9 ? 0 : 2);
 }
 
-/** A whole amount in prose: `moneyInt(160000)` -> `160,000`. */
-export function moneyInt(value: number): string {
-  return int(value);
+export function mamt(value: number): string {
+  return amt(value).replace(/,/g, "{,}").replace("−", "-");
 }
 
-/** Digit grouping that is safe inside math mode: `12{,}345.68`. */
-export function mathNum(value: number, decimals = 2): string {
-  return num(value, decimals).replace(/,/g, "{,}");
+/** A rate's percent figure with trailing zeros dropped: 0.0725 -> `7.25`. */
+export function rateFigure(rate: number, maxDecimals = 3): string {
+  const fixed = (rate * 100).toFixed(maxDecimals);
+  return fixed.includes(".") ? fixed.replace(/0+$/, "").replace(/\.$/, "") : fixed;
 }
 
-/** Whole-number digit grouping that is safe inside math mode. */
-export function mathInt(value: number): string {
-  return int(value).replace(/,/g, "{,}");
+/** `6%`, `7.25%` for prose. */
+export const pc = (rate: number, maxDecimals = 3): string => `${rateFigure(rate, maxDecimals)}%`;
+
+/** `6\%` inside math. */
+export const mpc = (rate: number, maxDecimals = 3): string => `${rateFigure(rate, maxDecimals)}\\%`;
+
+/** A decimal to `places` for derivations. */
+export const dec = (value: number, places = 6): string => value.toFixed(places);
+
+/** How an option prints. */
+export function formatAnswer(value: number, format: AnswerFormat): string {
+  switch (format.kind) {
+    case "money":
+      return num(value, format.decimals);
+    case "percent":
+      return `${num(value * 100, format.decimals)}%`;
+    case "number":
+      return `${num(value, format.decimals)}${format.unit ? ` ${format.unit}` : ""}`;
+  }
 }
 
-/** An amount inside math mode: `mathMoney(1250.5)` -> `1{,}250.50`. */
-export function mathMoney(value: number, decimals = 2): string {
-  return mathNum(value, decimals);
-}
-
-/** A whole amount inside math mode. */
-export function mathMoneyInt(value: number): string {
-  return mathInt(value);
-}
-
-/** Percentage for prose from a decimal rate: `pct(0.061)` -> `6.10%`. */
-export function pct(rate: number, decimals = 2): string {
-  return `${(rate * 100).toFixed(decimals)}%`;
-}
-
-/** Percentage inside math mode from a decimal rate: `mathPct(0.061)` -> `6.10\%`. */
-export function mathPct(rate: number, decimals = 2): string {
-  return `${(rate * 100).toFixed(decimals)}\\%`;
-}
-
-/** Decimal rate rendered at full precision for derivations: `0.061000`. */
-export function rate(value: number, decimals = 6): string {
-  return value.toFixed(decimals);
-}
-
-/** Ordinal suffix as math-mode markup: `ordinal(12)` -> `12^{\text{th}}`. */
-export function ordinal(n: number): string {
-  const remainderTen = n % 10;
-  const remainderHundred = n % 100;
-  let suffix = "th";
-  if (remainderTen === 1 && remainderHundred !== 11) suffix = "st";
-  else if (remainderTen === 2 && remainderHundred !== 12) suffix = "nd";
-  else if (remainderTen === 3 && remainderHundred !== 13) suffix = "rd";
-  return `${n}^{\\text{${suffix}}}`;
+/** The display value converted back to a number, for distinctness checks. */
+export function displayedValue(value: number, format: AnswerFormat): number {
+  const decimals = format.kind === "percent" ? format.decimals + 2 : format.decimals;
+  return Number(value.toFixed(decimals));
 }

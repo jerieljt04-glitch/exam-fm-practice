@@ -1,52 +1,83 @@
+// Local SQLite store. The database file lives at data/exam-fm.db unless
+// EXAM_FM_DATABASE_URL points elsewhere (tests use a temporary file).
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = env("EXAM_FM_DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
-enum TopicDomain {
-  TIME_VALUE_OF_MONEY
-  ANNUITIES
-  LOANS
-  BONDS
-  ALM_IMMUNIZATION
+model Session {
+  id              String            @id
+  mode            String // DIAGNOSTIC | EXAM | CHALLENGE | REMEDIATION | TRANSFER
+  status          String // ACTIVE | SUBMITTED
+  difficulty      String // "1" | "2" | "3" | "mixed"
+  timed           Boolean
+  durationSeconds Int?
+  elapsedSeconds  Int               @default(0)
+  currentIndex    Int               @default(0)
+  config          String            @default("{}") // JSON
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  submittedAt     DateTime?
+  questions       SessionQuestion[]
 }
 
-model QuestionTemplate {
-  id              String         @id @default(uuid())
-  domain          TopicDomain
-  templateText    String
-  solutionSteps   String
-  parameterSchema Json
-  generatedItems  ExamQuestion[]
+model SessionQuestion {
+  id                    String    @id
+  sessionId             String
+  session               Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  position              Int
+  templateId            String
+  family                String
+  topic                 String
+  difficulty            Int
+  payload               String // JSON QuestionInstance, including its validation record
+  selectedKey           String?
+  confidence            String?
+  method                String?
+  methodNote            String?
+  working               String    @default("")
+  flagged               Boolean   @default(false)
+  timeSpentSeconds      Int       @default(0)
+  isCorrect             Boolean?
+  selectedMisconception String?
+  answeredAt            DateTime?
+
+  @@index([sessionId])
+  @@index([templateId])
 }
 
-model ExamSession {
-  id               String         @id @default(uuid())
-  userId           String
-  startTime        DateTime       @default(now())
-  endTime          DateTime?
-  pausedTimeMs     Int            @default(0)
-  isPaused         Boolean        @default(false)
-  lastPausedAt     DateTime?
-  lastSeenAt       DateTime?
-  durationSeconds  Int            @default(9000) // 150 minutes
-  status           String         // "IN_PROGRESS", "PAUSED", "COMPLETED", "ABANDONED"
-  questions        ExamQuestion[]
+/// Every validation attempt, including rejected drafts that never reached a session.
+model ValidationLog {
+  id         String   @id @default(uuid())
+  templateId String
+  level      Int
+  seed       String
+  status     String // PASSED | REJECTED
+  record     String // JSON ValidationRecord
+  sessionId  String?
+  createdAt  DateTime @default(now())
+
+  @@index([status])
 }
 
-model ExamQuestion {
-  id                 String           @id @default(uuid())
-  examSessionId      String
-  examSession        ExamSession      @relation(fields: [examSessionId], references: [id])
-  templateId         String
-  template           QuestionTemplate @relation(fields: [templateId], references: [id])
-  renderedQuestion   String
-  renderedOptions    Json             // Array of { key: "A".."E", text: string, isCorrect: boolean }
-  selectedOption     String?
-  variables          Json
-  isCorrect          Boolean?
+/// One misconception (or weakly evidenced skill) moving through the remediation cycle.
+model RemediationItem {
+  id               String   @id @default(uuid())
+  target           String // misconception id, or objective id for weak-reasoning items
+  kind             String // MISCONCEPTION | WEAK_REASONING
+  objective        String
+  sourceQuestionId String
+  sourceTemplateId String
+  stage            Int      @default(1) // 1-2: variations now, 3: delayed retest
+  status           String // OPEN | SCHEDULED | RESOLVED
+  dueAt            DateTime
+  attempts         String   @default("[]") // JSON [{ questionId, templateId, correct, at }]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status])
 }

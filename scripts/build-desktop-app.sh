@@ -103,7 +103,7 @@ cd "$REPO" || die "Could not open $REPO"
 # what happens after pulling or merging new code.
 stale() {
   [ ! -f .next/BUILD_ID ] && return 0
-  [ -n "$(find app components lib hooks package.json next.config.mjs tailwind.config.js \
+  [ -n "$(find app components lib prisma package.json next.config.mjs tailwind.config.js \
             -newer .next/BUILD_ID -type f -print -quit 2>/dev/null)" ]
 }
 

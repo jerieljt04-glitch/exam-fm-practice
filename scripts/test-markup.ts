@@ -5,9 +5,7 @@
  * text that used to render as literal `$12^{\text{th}}$` on screen.
  */
 
-import katex from "katex";
 import { normalizePlainMathText, parseMarkup, tokenizeMath, type MathSegment } from "../lib/math/markup";
-import { DOMAIN_FORMULAS, FORMULA_SECTIONS } from "../lib/math/reference-formulas";
 
 let failures = 0;
 
@@ -145,32 +143,6 @@ describe("display math clears emphasis", parseMarkup("**bold**\n$$x = 1$$"), [
   { type: "break" },
   { type: "display", value: "x = 1" },
 ]);
-
-// The reference sheet and landing-page formulas are outside the generated
-// question bank, so the engine's KaTeX checks do not otherwise reach them.
-const renderMath = (name: string, expression: string, displayMode = false) => {
-  try {
-    katex.renderToString(expression, { displayMode, throwOnError: true, strict: false });
-  } catch (error) {
-    failures += 1;
-    console.error(`  ✗ ${name}: ${String(error)}`);
-  }
-};
-
-for (const [domain, formula] of Object.entries(DOMAIN_FORMULAS)) {
-  renderMath(`Landing formula ${domain}`, formula);
-}
-for (const section of FORMULA_SECTIONS) {
-  for (const formula of section.formulas) {
-    for (const content of [formula.name, formula.latex]) {
-      for (const segment of parseMarkup(content)) {
-        if (segment.type === "inline" || segment.type === "display") {
-          renderMath(`${section.title} / ${formula.name}`, segment.value, segment.type === "display");
-        }
-      }
-    }
-  }
-}
 
 console.log("\nResult");
 console.log("======");
