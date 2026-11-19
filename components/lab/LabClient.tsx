@@ -68,7 +68,7 @@ function AnnuityLab() {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1.5">
         {(["immediate", "due", "deferred", "increasing", "decreasing", "geometric"] as AnnuityKind[]).map((option) => (
-          <button key={option} onClick={() => setKind(option)} className={`rounded-full border px-3 py-1 text-sm ${kind === option ? "border-primary bg-primary/10" : "hover:bg-accent"}`}>
+          <button key={option} onClick={() => setKind(option)} className={`rounded-full border px-3 py-1 text-sm ${kind === option ? "border-primary-container bg-primary-container text-primary-on-container" : "hover:bg-accent"}`}>
             {option === "immediate" ? "Annuity-immediate" : option === "due" ? "Annuity-due" : option === "deferred" ? "Deferred" : option === "increasing" ? "Arithmetic increasing" : option === "decreasing" ? "Arithmetic decreasing" : "Geometric"}
           </button>
         ))}
@@ -165,7 +165,7 @@ function DurationLab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         {(["zero", "bullet", "barbell", "level"] as const).map((s) => (
-          <button key={s} onClick={() => setShape(s)} className={`rounded-full border px-3 py-1 text-sm ${shape === s ? "border-primary bg-primary/10" : "hover:bg-accent"}`}>
+          <button key={s} onClick={() => setShape(s)} className={`rounded-full border px-3 py-1 text-sm ${shape === s ? "border-primary-container bg-primary-container text-primary-on-container" : "hover:bg-accent"}`}>
             {s === "zero" ? "Zero-coupon" : s === "bullet" ? "Bullet" : s === "barbell" ? "Barbell" : "Level annuity"}
           </button>
         ))}
@@ -248,13 +248,13 @@ function TimelineLab() {
           {flows.map((f, idx) => (
             <tr key={idx}>
               <td className="pr-3">
-                <input type="number" value={f.t} min={0} max={40} onChange={(e) => update(idx, { t: Number(e.target.value) })} className="h-8 w-16 rounded border bg-card px-2" />
+                <input type="number" value={f.t} min={0} max={40} onChange={(e) => update(idx, { t: Number(e.target.value) })} className="h-8 w-16 rounded-field border bg-elevated px-2" />
               </td>
               <td className="pr-3">
-                <input type="number" value={f.amount} min={0} onChange={(e) => update(idx, { amount: Number(e.target.value) })} className="h-8 w-28 rounded border bg-card px-2" />
+                <input type="number" value={f.amount} min={0} onChange={(e) => update(idx, { amount: Number(e.target.value) })} className="h-8 w-28 rounded-field border bg-elevated px-2" />
               </td>
               <td className="pr-3">
-                <select value={f.dir} onChange={(e) => update(idx, { dir: e.target.value as "in" | "out" })} className="h-8 rounded border bg-card px-2">
+                <select value={f.dir} onChange={(e) => update(idx, { dir: e.target.value as "in" | "out" })} className="h-8 rounded-field border bg-elevated px-2">
                   <option value="in">received</option>
                   <option value="out">paid</option>
                 </select>

@@ -178,11 +178,11 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
             {saveState === "saving" ? "Saving…" : saveState === "unsaved" ? "Unsaved changes" : saveState === "error" ? "Save failed — will retry" : "All changes saved"}
           </span>
           {remaining !== null ? (
-            <span className={cn("rounded-md border px-3 py-1 font-mono text-base tabular-nums", timerTone)} aria-label="Time remaining">
+            <span className={cn("rounded-full border px-4 py-1 font-mono text-base tabular-nums", timerTone)} aria-label="Time remaining">
               {formatClock(remaining)}
             </span>
           ) : (
-            <span className="rounded-md border px-3 py-1 font-mono text-sm tabular-nums text-muted-foreground" aria-label="Time spent">
+            <span className="rounded-full border px-4 py-1 font-mono text-sm tabular-nums text-muted-foreground" aria-label="Time spent">
               {formatClock(elapsed)} · untimed
             </span>
           )}
@@ -196,12 +196,12 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
           {initial.notice}
         </p>
       )}
-      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow={answered} aria-valuemax={questions.length}>
-        <div className="h-full bg-primary transition-all" style={{ width: `${(100 * answered) / questions.length}%` }} />
+      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-pill bg-secondary" role="progressbar" aria-label="Questions answered" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={questions.length}>
+        <div className="google-bar h-full rounded-pill transition-[width] duration-slow ease-emphasized" style={{ width: `${(100 * answered) / questions.length}%`, backgroundSize: `${questions.length ? (100 * questions.length) / Math.max(1, answered) : 100}% 100%` }} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <section className="panel p-5">
+        <section className="panel p-6 sm:p-7">
           <MathRenderer key={current.instanceId} content={current.stem} className="text-[15px]" />
           <Exhibits key={`exhibits-${current.instanceId}`} exhibits={current.exhibits} className="mt-4" />
           <fieldset className="mt-5 space-y-2">
@@ -213,9 +213,9 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
                 <label
                   key={option.key}
                   className={cn(
-                    "flex min-w-0 cursor-pointer gap-3 rounded-md border px-3 py-2.5 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ring-offset-background",
+                    "flex min-w-0 cursor-pointer gap-3 rounded-lg border px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ring-offset-background",
                     rich ? "items-start" : "items-center",
-                    selected ? "border-primary bg-primary/10" : "hover:bg-accent"
+                    selected ? "border-primary bg-primary-container" : "bg-elevated hover:border-primary/40 hover:shadow-resting"
                   )}
                 >
                   <input
@@ -255,9 +255,9 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
                     role="radio"
                     aria-checked={current.response.confidence === level}
                     onClick={() => update({ confidence: level as Confidence })}
-                    className={cn("rounded-md border px-3 py-1.5 text-xs", current.response.confidence === level ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent")}
+                    className={cn("rounded-full border px-4 py-1.5 text-xs font-medium transition-colors", current.response.confidence === level ? "border-primary-container bg-primary-container text-primary-on-container" : "text-muted-foreground hover:bg-accent")}
                   >
-                    {CONFIDENCE_LABELS[level]}
+                    {current.response.confidence === level ? "✓ " : ""}{CONFIDENCE_LABELS[level]}
                   </button>
                 ))}
               </div>
@@ -270,7 +270,7 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
                 <select
                   value={current.response.method ?? ""}
                   onChange={(e) => update({ method: e.target.value || null })}
-                  className="h-9 w-full rounded-md border bg-card px-2 text-sm"
+                  className="h-10 w-full rounded-field border bg-elevated px-3 text-sm"
                 >
                   <option value="">Not recorded</option>
                   {METHODS.map((m) => (
@@ -283,24 +283,24 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
               {otherMethod && (
                 <label className="text-sm">
                   <span className="mb-1 block font-medium">Describe your approach</span>
-                  <input value={current.response.methodNote ?? ""} onChange={(e) => update({ methodNote: e.target.value })} className="h-9 w-full rounded-md border bg-card px-2 text-sm" />
+                  <input value={current.response.methodNote ?? ""} onChange={(e) => update({ methodNote: e.target.value })} className="h-9 w-full rounded-field border bg-elevated px-2 text-sm" />
                 </label>
               )}
             </div>
           </div>
 
           <div className="mt-5 flex items-center justify-between border-t pt-4">
-            <Button variant="outline" onClick={() => go(index - 1)} disabled={index === 0}>
+            <Button variant="outlined" onClick={() => go(index - 1)} disabled={index === 0}>
               ← Previous
             </Button>
             <button
               onClick={() => update({ flagged: !current.response.flagged })}
-              className={cn("rounded-md border px-3 py-1.5 text-sm", current.response.flagged ? "border-warning bg-warning/15" : "hover:bg-accent")}
+              className={cn("rounded-full border px-4 py-1.5 text-sm font-medium transition-colors", current.response.flagged ? "border-warning/40 bg-warning/15 text-warning" : "text-muted-foreground hover:bg-accent")}
               aria-pressed={current.response.flagged}
             >
               {current.response.flagged ? "⚑ Flagged for review" : "⚐ Flag for review"}
             </button>
-            <Button variant="outline" onClick={() => go(index + 1)} disabled={index === questions.length - 1}>
+            <Button variant="outlined" onClick={() => go(index + 1)} disabled={index === questions.length - 1}>
               Next →
             </Button>
           </div>
@@ -316,7 +316,7 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
                     role="tab"
                     aria-selected={sidePane === pane}
                     onClick={() => setSidePane(pane)}
-                    className={cn("rounded-md px-3 py-1 text-sm font-semibold", sidePane === pane ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent")}
+                    className={cn("rounded-full px-4 py-1.5 text-sm font-medium", sidePane === pane ? "bg-primary-container text-primary-on-container" : "text-muted-foreground hover:bg-accent")}
                   >
                     {pane === "working" ? "Working" : "Formula library"}
                   </button>
@@ -348,9 +348,9 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
                   key={cell.i}
                   onClick={() => go(cell.i)}
                   className={cn(
-                    "relative h-9 w-9 rounded-md border text-sm tabular-nums",
-                    cell.i === index && "ring-2 ring-primary",
-                    cell.state === "done" && "bg-primary/15",
+                    "relative h-9 w-9 rounded-full border text-sm tabular-nums transition-colors hover:bg-accent",
+                    cell.i === index && "ring-2 ring-primary ring-offset-1 ring-offset-card",
+                    cell.state === "done" && "border-primary-container bg-primary-container text-primary-on-container",
                     cell.state === "noconf" && "border-warning bg-warning/10"
                   )}
                   aria-label={`Question ${cell.i + 1}${cell.state === "open" ? ", not answered" : ""}${cell.state === "noconf" ? ", confidence missing" : ""}${cell.flagged ? ", flagged" : ""}`}
@@ -375,7 +375,7 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
         title="Submit this session?"
         footer={
           <>
-            <Button variant="outline" onClick={() => setSubmitOpen(false)}>
+            <Button variant="outlined" onClick={() => setSubmitOpen(false)}>
               Keep working
             </Button>
             <Button onClick={() => void submit()} disabled={submitting || missingConfidence.length > 0}>

@@ -101,7 +101,7 @@ export function FormulaDrill({ missed }: { missed: string[] }) {
         <div className="flex flex-wrap items-end gap-3 rounded-lg border p-4 text-sm">
           <label className="space-y-1">
             <span className="eyebrow block">Sheet section</span>
-            <select className="rounded-md border bg-card px-2 py-1.5" value={area} onChange={(e) => setArea(e.target.value as FormulaArea | "all")}>
+            <select className="rounded-field border bg-elevated px-2 py-1.5" value={area} onChange={(e) => setArea(e.target.value as FormulaArea | "all")}>
               <option value="all">All sections ({DRILL_ITEMS.length})</option>
               {AREAS.map((a) => (
                 <option key={a} value={a}>
@@ -112,7 +112,7 @@ export function FormulaDrill({ missed }: { missed: string[] }) {
           </label>
           <label className="space-y-1">
             <span className="eyebrow block">Questions</span>
-            <select className="rounded-md border bg-card px-2 py-1.5" value={length} onChange={(e) => setLength(Number(e.target.value))}>
+            <select className="rounded-field border bg-elevated px-2 py-1.5" value={length} onChange={(e) => setLength(Number(e.target.value))}>
               {[5, 10, 20].map((n) => (
                 <option key={n} value={n}>
                   {n}

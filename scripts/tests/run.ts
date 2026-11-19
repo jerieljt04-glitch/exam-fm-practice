@@ -27,6 +27,7 @@ async function main() {
   await import("./concepts.test");
   await import("./persistence.test");
   await import("./study.test");
+  await import("./theme.test");
   const failed = await run();
   const { prisma } = await import("../../lib/server/db");
   await prisma.$disconnect();

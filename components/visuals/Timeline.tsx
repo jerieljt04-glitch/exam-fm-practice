@@ -74,7 +74,7 @@ export function Timeline({
     >
       <div className="flex flex-wrap gap-1.5 pb-2">
         {valuationTimes.map((v) => (
-          <button key={v} onClick={() => setT(v)} className={`rounded-full border px-2 py-0.5 text-xs ${v === T ? "border-primary bg-primary/10" : "hover:bg-accent"}`}>
+          <button key={v} onClick={() => setT(v)} className={`rounded-full border px-2 py-0.5 text-xs ${v === T ? "border-primary-container bg-primary-container text-primary-on-container" : "hover:bg-accent"}`}>
             suggested: t = {v}
           </button>
         ))}

@@ -168,7 +168,8 @@ fi
 
 
 # Detach the server so it survives this launcher exiting.
-nohup npm start -- --port "$PORT" >> "$LOG" 2>&1 &
+# Listen on this Mac only (127.0.0.1), never on the local network.
+nohup npm start -- --port "$PORT" --hostname 127.0.0.1 >> "$LOG" 2>&1 &
 SERVER_PID=$!
 disown "$SERVER_PID" 2>/dev/null || true
 echo "$SERVER_PID" > "$PIDFILE"

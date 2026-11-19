@@ -282,6 +282,25 @@ only rewrites the scenario text; a rewording is accepted only if every number an
 mathematical expression is unchanged, no method or topic is revealed, and it still typesets.
 Otherwise the validated original is used. The key is used only on the server.
 
+## Design system
+
+The interface follows Google's design language (Material 3 with Google Workspace surfaces and a
+Gemini-style expressive accent, kept to roughly 90% calm surfaces and 10% expressive colour).
+
+- **One source of truth:** `lib/theme/tokens.ts` defines every colour (light and dark), gradient,
+  elevation, radius, motion curve and font stack as typed `as const` objects, with union types
+  `ThemeMode`, `SurfaceVariant`, `ButtonVariant` and `AccentTone`.
+- `tailwind.config.ts` imports the tokens and emits them as CSS custom properties (`--g-*` and the
+  HSL channels behind the Tailwind colour names). `app/globals.css` contains no colour values.
+- Fonts are self-hosted (`@fontsource`): Plus Jakarta Sans for display type, Inter for body text,
+  Roboto as fallback — the desktop app builds and runs offline.
+- Components: 40px pill buttons (`primary`, `tonal`, `outlined`, `ghost`, `danger`), tonal chips,
+  16px cards that separate from the white canvas by tone rather than borders, 12px outlined fields
+  with a Google-blue focus, 28px dialogs, icon-led pill navigation (lucide, stroke 1.75), Material 3
+  emphasized easing, and `prefers-reduced-motion` respected.
+- `scripts/tests/theme.test.ts` checks WCAG AA contrast for every text/surface pairing in both modes,
+  that the stylesheet hard-codes no colours, and that every `text-*` colour class in use exists.
+
 ## Tests
 
 ```bash

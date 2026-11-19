@@ -12,7 +12,7 @@ export default async function DrillPage() {
         <a href="/study" className="text-xs text-primary hover:underline">
           ← Study
         </a>
-        <h1 className="text-2xl font-semibold tracking-tight">Formula drill: spot the right form</h1>
+        <h1 className="font-display text-[30px] font-semibold sm:text-[32px]">Formula drill: spot the right form</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           {DRILL_ITEMS.length} formulas, each shown beside three near-misses of the kind memory really produces — i for d, n − t for n − t + 1, a for ä, a missing root.
           Every wrong form is checked numerically to be genuinely wrong, and says what it actually computes.

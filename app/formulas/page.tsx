@@ -27,7 +27,7 @@ export default async function FormulasPage() {
   return (
     <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Formula library</h1>
+        <h1 className="font-display text-[30px] font-semibold sm:text-[32px]">Formula library</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           {FORMULAS.length} formulas extracted from the two reference sheets, each with the sheets’ own notation and page, its assumptions, common misuse and the syllabus outcomes it serves. {discrepancies} entries are flagged where the sheets
           differ; {unclear} are on a sheet but of unclear relevance to the current syllabus and are never required by the question bank.

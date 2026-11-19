@@ -48,7 +48,7 @@ export const UNIT_LABEL: Record<string, string> = { year: "year", "half-year": "
 
 export function Frame({ title, caption, children, controls }: { title: string; caption?: string; children: React.ReactNode; controls?: React.ReactNode }) {
   return (
-    <figure className="rounded-lg border bg-card p-3">
+    <figure className="rounded-lg border bg-elevated p-4">
       <figcaption className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-semibold">{title}</span>
         {controls}
@@ -89,7 +89,7 @@ export function StepControls({
   onTogglePlay: () => void;
   label: string;
 }) {
-  const button = "rounded-md border px-2 py-1 text-xs hover:bg-accent disabled:opacity-40";
+  const button = "rounded-full border px-3 py-1 text-xs font-medium text-primary hover:bg-primary/5 disabled:opacity-40";
   return (
     <div className="flex items-center gap-1.5">
       <button className={button} onClick={() => onChange(0)} disabled={index === 0} aria-label="First">

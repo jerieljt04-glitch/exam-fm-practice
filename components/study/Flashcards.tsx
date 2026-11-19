@@ -315,7 +315,7 @@ export function Flashcards({ initialStates, initialDeck }: { initialStates: Reco
           <div className="space-y-3 rounded-lg border p-4 text-sm">
             <div className="flex flex-wrap gap-2">
               {(["formulas", "concepts"] as Deck[]).map((d) => (
-                <Button key={d} size="sm" variant={deck === d ? "primary" : "outline"} onClick={() => setDeck(d)}>
+                <Button key={d} size="sm" variant={deck === d ? "primary" : "outlined"} onClick={() => setDeck(d)}>
                   {DECK_LABELS[d]}
                 </Button>
               ))}
@@ -324,7 +324,7 @@ export function Flashcards({ initialStates, initialDeck }: { initialStates: Reco
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1">
                   <span className="eyebrow block">Sheet section</span>
-                  <select className="w-full rounded-md border bg-card px-2 py-1.5" value={area} onChange={(e) => setArea(e.target.value as FormulaArea | "all")}>
+                  <select className="w-full rounded-field border bg-elevated px-2 py-1.5" value={area} onChange={(e) => setArea(e.target.value as FormulaArea | "all")}>
                     <option value="all">All sections</option>
                     {AREAS.map((a) => (
                       <option key={a} value={a}>
@@ -335,7 +335,7 @@ export function Flashcards({ initialStates, initialDeck }: { initialStates: Reco
                 </label>
                 <label className="space-y-1">
                   <span className="eyebrow block">Card type</span>
-                  <select className="w-full rounded-md border bg-card px-2 py-1.5" value={kind} onChange={(e) => setKind(e.target.value as CardKind | "both")}>
+                  <select className="w-full rounded-field border bg-elevated px-2 py-1.5" value={kind} onChange={(e) => setKind(e.target.value as CardKind | "both")}>
                     <option value="both">Both directions</option>
                     <option value="recall">{CARD_KIND_LABELS.recall} (name → formula)</option>
                     <option value="recognise">{CARD_KIND_LABELS.recognise} (formula → name and use)</option>
@@ -349,7 +349,7 @@ export function Flashcards({ initialStates, initialDeck }: { initialStates: Reco
             ) : (
               <label className="block space-y-1">
                 <span className="eyebrow block">Topic</span>
-                <select className="w-full rounded-md border bg-card px-2 py-1.5 sm:w-72" value={topic} onChange={(e) => setTopic(e.target.value as TopicId | "all")}>
+                <select className="w-full rounded-field border bg-elevated px-2 py-1.5 sm:w-72" value={topic} onChange={(e) => setTopic(e.target.value as TopicId | "all")}>
                   <option value="all">All topics</option>
                   {TOPIC_ORDER.map((t) => (
                     <option key={t} value={t}>
@@ -362,7 +362,7 @@ export function Flashcards({ initialStates, initialDeck }: { initialStates: Reco
             <div className="flex flex-wrap items-end gap-3">
               <label className="space-y-1">
                 <span className="eyebrow block">Mode</span>
-                <select className="rounded-md border bg-card px-2 py-1.5" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+                <select className="rounded-field border bg-elevated px-2 py-1.5" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
                   <option value="due">Spaced review (due cards + new)</option>
                   <option value="cram">Cram (every card in this selection, shuffled)</option>
                 </select>
@@ -370,7 +370,7 @@ export function Flashcards({ initialStates, initialDeck }: { initialStates: Reco
               {mode === "due" && (
                 <label className="space-y-1">
                   <span className="eyebrow block">New cards this round</span>
-                  <select className="rounded-md border bg-card px-2 py-1.5" value={newLimit} onChange={(e) => setNewLimit(Number(e.target.value))}>
+                  <select className="rounded-field border bg-elevated px-2 py-1.5" value={newLimit} onChange={(e) => setNewLimit(Number(e.target.value))}>
                     {[0, 5, 10, 15, 25, 40].map((n) => (
                       <option key={n} value={n}>
                         {n}

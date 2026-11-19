@@ -52,7 +52,7 @@ function useStarter() {
   return { busy, error, start };
 }
 
-const select = "h-9 rounded-md border bg-card px-2 text-sm";
+const select = "h-10 rounded-field border bg-elevated px-3 text-sm";
 
 export function StartPanel({ llm }: { llm: boolean }) {
   const { busy, error, start } = useStarter();
@@ -192,7 +192,7 @@ export function StartPanel({ llm }: { llm: boolean }) {
                         step={5}
                         value={mix[b.id]}
                         onChange={(e) => setMix((m) => ({ ...m, [b.id]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))}
-                        className="h-8 w-16 rounded-md border bg-card px-2 text-sm text-foreground"
+                        className="h-8 w-16 rounded-field border bg-elevated px-2 text-sm text-foreground"
                         aria-label={`${b.label} percentage`}
                       />
                       %
@@ -293,7 +293,7 @@ export function ResetHistory() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const reset = async () => {
-    await fetch("/api/history", { method: "DELETE" });
+    await fetch("/api/history", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: "ERASE_ALL_HISTORY" }) });
     setOpen(false);
     router.refresh();
   };
@@ -308,7 +308,7 @@ export function ResetHistory() {
         title="Delete all history?"
         footer={
           <>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button variant="outlined" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button variant="danger" onClick={() => void reset()}>

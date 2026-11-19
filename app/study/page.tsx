@@ -32,7 +32,7 @@ function Stages({ stages, total }: { stages: Record<"new" | "learning" | "young"
 
 function Tool({ href, title, children, action }: { href: string; title: string; children: React.ReactNode; action: string }) {
   return (
-    <div className="flex flex-col rounded-lg border bg-card p-4">
+    <div className="flex flex-col rounded-card bg-card p-6">
       <h3 className="font-semibold">{title}</h3>
       <div className="mt-2 flex-1 space-y-2 text-sm">{children}</div>
       <Link href={href} className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
@@ -51,7 +51,7 @@ export default async function StudyHub() {
     <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Study</h1>
+          <h1 className="font-display text-[30px] font-semibold sm:text-[32px]">Study</h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
             Learning with instant feedback: memorise the formulas on the two reference sheets, and build the conceptual understanding the exam tests. Nothing here counts toward the
             closed-book mastery measured by the sessions on the dashboard — use those to check what has stuck.

@@ -48,9 +48,9 @@ export function FormulaLibrary({ compact = false, highlight }: { compact?: boole
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search formulas, symbols, uses…"
           aria-label="Search formulas"
-          className="h-9 min-w-0 flex-1 rounded-md border bg-card px-3"
+          className="h-10 min-w-0 flex-1 rounded-pill border bg-elevated px-5"
         />
-        <select className="h-9 rounded-md border bg-card px-2" value={area} onChange={(e) => setArea(e.target.value as typeof area)} aria-label="Area">
+        <select className="h-9 rounded-field border bg-elevated px-2" value={area} onChange={(e) => setArea(e.target.value as typeof area)} aria-label="Area">
           {highlight?.length ? <option value="question">Formulas for this question</option> : null}
           <option value="all">All areas</option>
           {AREAS.map((a) => (
@@ -61,7 +61,7 @@ export function FormulaLibrary({ compact = false, highlight }: { compact?: boole
           ))}
         </select>
         {!compact && (
-          <select className="h-9 rounded-md border bg-card px-2" value={flag} onChange={(e) => setFlag(e.target.value as typeof flag)} aria-label="Flags">
+          <select className="h-9 rounded-field border bg-elevated px-2" value={flag} onChange={(e) => setFlag(e.target.value as typeof flag)} aria-label="Flags">
             <option value="all">All formulas</option>
             <option value="discrepancy">Sheets differ</option>
             <option value="unclear">Relevance unclear</option>

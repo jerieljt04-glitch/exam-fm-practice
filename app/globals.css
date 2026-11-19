@@ -2,89 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Every colour, gradient, shadow, radius and font token is generated from
+ * lib/theme/tokens.ts by the plugin in tailwind.config.ts (light on :root,
+ * dark under prefers-color-scheme). Nothing here hard-codes a colour.
+ */
+
 @layer base {
-  :root {
-    --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-
-    --background: 210 20% 98%;
-    --foreground: 222 30% 14%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 30% 14%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 30% 14%;
-    --primary: 221 70% 42%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 215 25% 93%;
-    --secondary-foreground: 222 30% 18%;
-    --muted: 215 25% 95%;
-    --muted-foreground: 217 12% 40%;
-    --accent: 214 40% 94%;
-    --accent-foreground: 222 30% 18%;
-    --destructive: 0 68% 46%;
-    --destructive-foreground: 0 0% 100%;
-    --success: 152 60% 32%;
-    --success-foreground: 0 0% 100%;
-    --warning: 34 90% 42%;
-    --warning-foreground: 0 0% 100%;
-    --border: 215 20% 86%;
-    --input: 215 20% 82%;
-    --ring: 221 70% 42%;
-    --radius: 0.6rem;
-
-    /* Chart and visual tokens */
-    --viz-in: 152 55% 36%;
-    --viz-out: 221 70% 48%;
-    --viz-interest: 34 90% 48%;
-    --viz-principal: 221 70% 48%;
-    --viz-balance: 280 45% 50%;
-    --viz-trap: 0 68% 50%;
-    --viz-grid: 215 20% 88%;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: 222 30% 8%;
-      --foreground: 210 30% 94%;
-      --card: 222 28% 11%;
-      --card-foreground: 210 30% 94%;
-      --popover: 222 28% 11%;
-      --popover-foreground: 210 30% 94%;
-      --primary: 217 85% 62%;
-      --primary-foreground: 222 30% 10%;
-      --secondary: 220 22% 18%;
-      --secondary-foreground: 210 30% 94%;
-      --muted: 220 22% 15%;
-      --muted-foreground: 215 15% 68%;
-      --accent: 220 25% 19%;
-      --accent-foreground: 210 30% 94%;
-      --destructive: 0 70% 58%;
-      --destructive-foreground: 0 0% 100%;
-      --success: 152 55% 48%;
-      --success-foreground: 222 30% 10%;
-      --warning: 38 92% 56%;
-      --warning-foreground: 222 30% 10%;
-      --border: 220 20% 22%;
-      --input: 220 20% 26%;
-      --ring: 217 85% 62%;
-      --viz-in: 152 55% 50%;
-      --viz-out: 217 85% 64%;
-      --viz-interest: 38 92% 58%;
-      --viz-principal: 217 85% 64%;
-      --viz-balance: 280 55% 68%;
-      --viz-trap: 0 70% 62%;
-      --viz-grid: 220 20% 24%;
-    }
-  }
-
   * {
     @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
-    font-feature-settings: "tnum" 1;
+    font-size: 15px;
+    line-height: 1.55;
+    font-feature-settings: "tnum" 1, "cv11" 1;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  h1 {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  /* Interactive elements share Material 3 emphasized motion. */
+  a,
+  button,
+  select,
+  input,
+  textarea,
+  summary,
+  [role="tab"],
+  [role="radio"] {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: 200ms;
+    transition-timing-function: var(--g-ease);
+  }
+
+  /* Outlined text fields: 12px corners, hairline outline, 2px Google-blue focus. */
+  select,
+  input:not([type="radio"]):not([type="checkbox"]):not([type="range"]),
+  textarea {
+    border-radius: var(--g-radius-field);
+    border-color: hsl(var(--input));
+    background-color: var(--g-elevated);
+  }
+  select:hover,
+  input:not([type="radio"]):not([type="checkbox"]):not([type="range"]):hover,
+  textarea:hover {
+    border-color: hsl(var(--input-hover));
+  }
+  select:focus,
+  input:not([type="radio"]):not([type="checkbox"]):not([type="range"]):focus,
+  textarea:focus {
+    outline: none;
+    border-color: var(--g-accent-primary);
+    box-shadow: 0 0 0 1px var(--g-accent-primary);
+  }
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"] {
+    accent-color: var(--g-accent-primary);
+  }
+
+  a {
+    text-underline-offset: 3px;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--g-accent-primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
   }
 }
 
@@ -113,20 +122,54 @@
     border-radius: 999px;
   }
   .katex-error {
-    color: hsl(var(--destructive));
+    color: hsl(var(--destructive-ink));
     font-family: var(--font-mono);
   }
+
+  /* Cards separate from the canvas by a tonal shift, not a heavy border. */
   .panel {
-    @apply rounded-lg border bg-card text-card-foreground shadow-sm;
+    @apply rounded-card bg-card text-card-foreground;
   }
+  /* Link tiles and option rows inside a card sit on the elevated (white) surface. */
+  .panel a.rounded-lg.border {
+    background-color: var(--g-elevated);
+  }
+  a.rounded-lg.border:hover {
+    box-shadow: var(--g-shadow-raised);
+    border-color: transparent;
+  }
+
   .eyebrow {
-    @apply text-xs font-semibold uppercase tracking-wide text-muted-foreground;
+    @apply text-[13px] font-medium text-primary;
+  }
+  .micro {
+    @apply text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground;
   }
   .stat {
-    @apply text-2xl font-semibold tabular-nums;
+    @apply font-display text-2xl font-semibold tabular-nums;
+  }
+
+  /* Expressive accents — used sparingly (hero headline, progress, focal cards). */
+  .text-gradient {
+    background-image: var(--g-gradient-expressive);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero-wash {
+    background-image: var(--g-wash);
+  }
+  .google-bar {
+    background-image: var(--g-gradient-google);
+  }
+  .gradient-ring {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(var(--g-elevated), var(--g-elevated)) padding-box,
+      var(--g-gradient-expressive) border-box;
   }
 }
 
 kbd {
-  @apply rounded border bg-muted px-1 py-px font-mono text-[0.8em];
+  @apply rounded-sm border bg-muted px-1 py-px font-mono text-[0.8em];
 }

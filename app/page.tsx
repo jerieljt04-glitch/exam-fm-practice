@@ -43,16 +43,20 @@ export default async function Dashboard() {
   const tested = d.mastery.filter((m) => m.status !== "NOT_TESTED").length;
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            {SYLLABUS_VERSION} · {d.totals.attempts} questions answered · {d.validation.PASSED ?? 0} questions validated, {d.validation.REJECTED ?? 0} drafts rejected by the checker
+    <main className="hero-wash bg-no-repeat">
+      <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+      <section className="flex flex-wrap items-end justify-between gap-4 pb-2 pt-6">
+        <div className="max-w-[68ch] animate-rise">
+          <div className="micro mb-2">{SYLLABUS_VERSION}</div>
+          <h1 className="font-display text-[34px] font-semibold sm:text-[40px]">
+            <span className="text-gradient">Practise with purpose.</span>
+          </h1>
+          <p className="mt-2 text-[15px] text-muted-foreground">
+            {d.totals.attempts} questions answered · {d.validation.PASSED ?? 0} questions validated · {d.validation.REJECTED ?? 0} drafts rejected by the checker
           </p>
         </div>
         <ResetHistory />
-      </div>
+      </section>
 
       <StartPanel llm={d.llm} />
 
@@ -480,6 +484,7 @@ export default async function Dashboard() {
           <p className="text-sm text-muted-foreground">No completed sessions yet. A 15-question diagnostic is a good first step.</p>
         )}
       </Panel>
+      </div>
     </main>
   );
 }

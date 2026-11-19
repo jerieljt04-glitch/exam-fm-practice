@@ -59,7 +59,7 @@ function TransferButton({ questionId }: { questionId: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button variant="outline" onClick={() => void startTransfer()} disabled={starting}>
+      <Button variant="outlined" onClick={() => void startTransfer()} disabled={starting}>
         {starting ? "Generating…" : "Test this principle in a different context"}
       </Button>
       <span className="text-xs text-muted-foreground">Two new questions on the same principle, from different templates.</span>

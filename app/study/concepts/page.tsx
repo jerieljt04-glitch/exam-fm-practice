@@ -11,7 +11,7 @@ export default async function ConceptStudyPage({ searchParams }: { searchParams:
         <a href="/study" className="text-xs text-primary hover:underline">
           ← Study
         </a>
-        <h1 className="text-2xl font-semibold tracking-tight">Concept practice with instant feedback</h1>
+        <h1 className="font-display text-[30px] font-semibold sm:text-[32px]">Concept practice with instant feedback</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           Practice aimed at understanding rather than calculation: what a formula means, when it applies, how quantities move together, and why tempting answers are wrong.
         </p>

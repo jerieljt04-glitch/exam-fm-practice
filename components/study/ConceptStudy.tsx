@@ -35,7 +35,7 @@ function TopicSelect({ value, onChange }: { value: TopicId | "all"; onChange: (t
   return (
     <label className="space-y-1">
       <span className="eyebrow block">Topic</span>
-      <select className="rounded-md border bg-card px-2 py-1.5" value={value} onChange={(e) => onChange(e.target.value as TopicId | "all")}>
+      <select className="rounded-field border bg-elevated px-2 py-1.5" value={value} onChange={(e) => onChange(e.target.value as TopicId | "all")}>
         <option value="all">All topics</option>
         {TOPIC_ORDER.map((t) => (
           <option key={t} value={t}>
@@ -144,7 +144,7 @@ function QuickChecks({ missed }: { missed: string[] }) {
           <TopicSelect value={topic} onChange={setTopic} />
           <label className="space-y-1">
             <span className="eyebrow block">Statements</span>
-            <select className="rounded-md border bg-card px-2 py-1.5" value={length} onChange={(e) => setLength(Number(e.target.value))}>
+            <select className="rounded-field border bg-elevated px-2 py-1.5" value={length} onChange={(e) => setLength(Number(e.target.value))}>
               {[10, 15, 25].map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -184,10 +184,10 @@ function QuickChecks({ missed }: { missed: string[] }) {
       </div>
       {answer === null ? (
         <div className="grid grid-cols-2 gap-3">
-          <Button size="lg" variant="outline" onClick={() => respond(true)}>
+          <Button size="lg" variant="outlined" onClick={() => respond(true)}>
             True <span className="text-xs opacity-60">(T)</span>
           </Button>
-          <Button size="lg" variant="outline" onClick={() => respond(false)}>
+          <Button size="lg" variant="outlined" onClick={() => respond(false)}>
             False <span className="text-xs opacity-60">(F)</span>
           </Button>
         </div>
@@ -268,7 +268,7 @@ function ConceptQuestions() {
         <TopicSelect value={topic} onChange={setTopic} />
         <label className="space-y-1">
           <span className="eyebrow block">Focus</span>
-          <select className="rounded-md border bg-card px-2 py-1.5" value={focus} onChange={(e) => setFocus(e.target.value as ConceptFocus)}>
+          <select className="rounded-field border bg-elevated px-2 py-1.5" value={focus} onChange={(e) => setFocus(e.target.value as ConceptFocus)}>
             {(Object.keys(CONCEPT_FOCUS_LABELS) as ConceptFocus[]).map((f) => (
               <option key={f} value={f}>
                 {CONCEPT_FOCUS_LABELS[f]}
@@ -278,7 +278,7 @@ function ConceptQuestions() {
         </label>
         <label className="space-y-1">
           <span className="eyebrow block">Level</span>
-          <select className="rounded-md border bg-card px-2 py-1.5" value={level} onChange={(e) => setLevel(e.target.value as typeof level)}>
+          <select className="rounded-field border bg-elevated px-2 py-1.5" value={level} onChange={(e) => setLevel(e.target.value as typeof level)}>
             <option value="1">{DIFFICULTY_LABELS[1]}</option>
             <option value="2">{DIFFICULTY_LABELS[2]}</option>
             <option value="3">{DIFFICULTY_LABELS[3]}</option>

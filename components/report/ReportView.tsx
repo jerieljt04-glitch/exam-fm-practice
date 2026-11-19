@@ -68,7 +68,7 @@ export function ReportView({ report, remediationDue, initialTab, initialQuestion
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="eyebrow">{MODE_LABELS[report.session.mode] ?? report.session.mode} · submitted <LocalTime iso={report.session.submittedAt} /></div>
-          <h1 className="text-2xl font-semibold">Diagnostic report</h1>
+          <h1 className="font-display text-[30px] font-semibold sm:text-[32px]">Diagnostic report</h1>
         </div>
         <div className="flex gap-2">
           {remediationDue > 0 && (
@@ -76,7 +76,7 @@ export function ReportView({ report, remediationDue, initialTab, initialQuestion
               {starting ? "Generating…" : `Start remediation (${remediationDue} due)`}
             </Button>
           )}
-          <Link href="/" className="inline-flex h-9 items-center rounded-md border px-4 text-sm hover:bg-accent">
+          <Link href="/" className="inline-flex h-9 items-center rounded-full border px-5 text-sm font-medium text-primary hover:bg-primary/5">
             Dashboard
           </Link>
         </div>
