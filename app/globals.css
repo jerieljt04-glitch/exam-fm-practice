@@ -126,3 +126,7 @@
     @apply text-2xl font-semibold tabular-nums;
   }
 }
+
+kbd {
+  @apply rounded border bg-muted px-1 py-px font-mono text-[0.8em];
+}

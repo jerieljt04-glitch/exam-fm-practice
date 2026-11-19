@@ -19,6 +19,8 @@ REPO_ROOT="${EXAM_FM_REPO:-$SCRIPT_ROOT}"
 APP_NAME="Exam FM Practice"
 BUNDLE_ID="com.examfm.practice"
 PORT="${EXAM_FM_PORT:-4173}"
+# Browser the app opens the page in (bundle id). Helium by default; falls back to the default browser if it is missing.
+BROWSER_ID="${EXAM_FM_BROWSER_ID:-net.imput.helium}"
 STAGING="$SCRIPT_ROOT/dist/$APP_NAME.app"
 INSTALL_DIR="$HOME/Applications"
 INSTALL=1
@@ -27,6 +29,7 @@ INSTALL=1
 echo "Building $APP_NAME.app"
 echo "  repository : $REPO_ROOT"
 echo "  port       : $PORT"
+echo "  browser    : $BROWSER_ID"
 
 rm -rf "$STAGING"
 mkdir -p "$STAGING/Contents/MacOS" "$STAGING/Contents/Resources"
@@ -74,6 +77,7 @@ cat > "$STAGING/Contents/MacOS/exam-fm-practice" <<LAUNCHER
 #
 REPO="$REPO_ROOT"
 PORT="$PORT"
+BROWSER_ID="$BROWSER_ID"
 LAUNCHER
 cat >> "$STAGING/Contents/MacOS/exam-fm-practice" <<'LAUNCHER'
 URL="http://127.0.0.1:$PORT"
@@ -93,6 +97,8 @@ die()  { /usr/bin/osascript -e "display dialog \"$1\" with title \"Exam FM Pract
 # different local server on the same port can never be mistaken for ours.
 alive() { /usr/bin/curl -sf --max-time 3 "$URL" 2>/dev/null | /usr/bin/grep -q "Exam FM Practice"; }
 port_taken() { /usr/bin/nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1; }
+# Open the page in the chosen browser; use the default browser only if it is not installed.
+open_page() { /usr/bin/open -b "$BROWSER_ID" "$URL" 2>/dev/null || /usr/bin/open "$URL"; }
 
 { echo; echo "=== $(date) launch ==="; } >> "$LOG"
 
@@ -141,7 +147,7 @@ if alive; then
     stop_server
   else
     echo "server already running; reopening $URL" >> "$LOG"
-    open "$URL"
+    open_page
     exit 0
   fi
 fi
@@ -180,7 +186,7 @@ if ! alive; then
 fi
 
 echo "server ready on $PORT (pid $SERVER_PID)" >> "$LOG"
-open "$URL"
+open_page
 LAUNCHER
 
 chmod +x "$STAGING/Contents/MacOS/exam-fm-practice"

@@ -1,7 +1,8 @@
 import { getMisconception, MISCONCEPTION_CATEGORIES, type MisconceptionCategory } from "../engine/misconceptions";
 import { CONFIDENCE_LEVELS, isConfident, isUnsure, type Confidence } from "../engine/skills";
 import { getFormula } from "../formulas/registry";
-import { CHAIN_ERROR_LABELS, type ChainErrorKind, type QuestionInstance } from "../engine/types";
+import { getConcept } from "../concepts/registry";
+import { CHAIN_ERROR_LABELS, CONCEPT_FAILURE_LABELS, isConceptItem, type ChainErrorKind, type ConceptFailure, type QuestionInstance } from "../engine/types";
 
 /** One answered (or skipped) question in a submitted session, with everything analysis needs. */
 export interface AttemptRecord {
@@ -75,6 +76,10 @@ export interface AttemptEvidence {
   chainError: ChainErrorKind | null;
   chainFormula: string | null;
   wrongFormula: string | null;
+  /** Concept-chain step where the chosen option's reasoning fails, the kind of failure, and the concept it confuses. */
+  conceptStage: number | null;
+  conceptFailure: ConceptFailure | null;
+  confusedWith: string | null;
   quality: ReasoningQuality;
   cause: ErrorCause | null;
   observed: string[];
@@ -142,7 +147,17 @@ export function classifyAttempt(attempt: AttemptRecord): AttemptEvidence {
     observed.push("No answer was selected.");
   } else if (correct) {
     observed.push(`Selected ${attempt.selectedKey}, the correct answer.`);
-    if (workingShowsMistake && !workingShowsCorrectMethod) {
+    if (isConceptItem(instance)) {
+      // Concept items are judged by understanding; numerical working is not expected.
+      if (isUnsure(attempt.confidence)) {
+        quality = "POSSIBLE_GUESS";
+        observed.push(`Confidence was recorded as ${attempt.confidence?.toLowerCase().replace("_", " ")}.`);
+        inferred.push("A correct concept answer at low confidence may have been an elimination; it is not counted as secure understanding.");
+      } else {
+        quality = "SOUND";
+        observed.push("Concept question answered correctly with at least medium confidence.");
+      }
+    } else if (workingShowsMistake && !workingShowsCorrectMethod) {
       quality = "SUSPECT_METHOD";
       observed.push("The working contains an intermediate value produced by a known mistake.");
       inferred.push(`The final number is right, but the working suggests “${getMisconception(workingShowsMistake)?.label}” — the method may not be valid in general.`);
@@ -165,11 +180,17 @@ export function classifyAttempt(attempt: AttemptRecord): AttemptEvidence {
     observed.push(`Selected ${attempt.selectedKey} (${selected?.display}); the correct answer was ${instance.correctKey}.`);
     if (misconception) {
       observed.push(`Option ${attempt.selectedKey} is exactly the value produced by: ${misconception.label.toLowerCase()}.`);
-      if (selected?.chainStage !== null && selected?.chainStage !== undefined) {
+      if (instance.chain && selected?.chainStage !== null && selected?.chainStage !== undefined) {
         const stepAt = instance.chain.steps[selected.chainStage];
         const formulaName = stepAt ? getFormula(stepAt.formula)?.name ?? stepAt.formula : "";
         observed.push(
           `That value arises at step ${selected.chainStage + 1} of ${instance.chain.steps.length} in the formula chain (${formulaName}) — an error in ${CHAIN_ERROR_LABELS[selected.chainError ?? "application"].toLowerCase()}${selected.wrongFormula ? `, using ${getFormula(selected.wrongFormula)?.name ?? selected.wrongFormula} instead` : ""}.`
+        );
+      }
+      if (instance.kind === "choice" && instance.concept && selected?.conceptStage !== null && selected?.conceptStage !== undefined) {
+        const stepAt = instance.concept.steps[selected.conceptStage];
+        observed.push(
+          `That option's reasoning fails at step ${selected.conceptStage + 1} of ${instance.concept.steps.length} (${getConcept(stepAt?.concept ?? "")?.label ?? stepAt?.concept ?? "concept"}) — a failure of ${CONCEPT_FAILURE_LABELS[selected.conceptFailure ?? "application"].toLowerCase()}${selected.confusedWith ? `, confusing it with ${getConcept(selected.confusedWith)?.label.toLowerCase() ?? selected.confusedWith}` : ""}.`
         );
       }
       cause = CATEGORY_CAUSE[misconception.category];
@@ -203,8 +224,11 @@ export function classifyAttempt(attempt: AttemptRecord): AttemptEvidence {
     selectedMisconception,
     chainStage,
     chainError: selected && !selected.isCorrect ? selected.chainError ?? null : null,
-    chainFormula: chainStage !== null ? instance.chain.steps[chainStage]?.formula ?? null : null,
+    chainFormula: chainStage !== null ? instance.chain?.steps[chainStage]?.formula ?? null : null,
     wrongFormula: selected && !selected.isCorrect ? selected.wrongFormula ?? null : null,
+    conceptStage: selected && !selected.isCorrect ? selected.conceptStage ?? null : null,
+    conceptFailure: selected && !selected.isCorrect ? selected.conceptFailure ?? null : null,
+    confusedWith: selected && !selected.isCorrect ? selected.confusedWith ?? null : null,
     quality,
     cause,
     observed,

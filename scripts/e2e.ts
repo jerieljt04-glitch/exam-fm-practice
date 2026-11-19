@@ -23,7 +23,10 @@ async function api(path: string, init?: RequestInit) {
   return { status: res.status, body, text };
 }
 
-const FORBIDDEN_KEYS = ["isCorrect", "misconceptionTag", "explanation", "correctKey", "topic", "difficulty", "objective", "validation", "calc", "feedbackExplanation"];
+const FORBIDDEN_KEYS = [
+  "isCorrect", "misconceptionTag", "explanation", "correctKey", "topic", "difficulty", "objective", "validation", "calc", "feedbackExplanation",
+  "statements", "truth", "justification", "concept", "conceptStage", "conceptFailure", "conditionTrue", "probe", "check", "chain",
+];
 
 function leaks(view: any): string[] {
   const found = new Set<string>();
@@ -110,14 +113,38 @@ async function main() {
   await answerAll(diag.body.id, diagView);
   await api(`/api/sessions/${diag.body.id}/submit`, { method: "POST", body: "{}" });
 
-  const challenge = await api("/api/sessions", { method: "POST", body: JSON.stringify({ mode: "CHALLENGE", count: 8, difficulty: 3 }) });
+  const challenge = await api("/api/sessions", { method: "POST", body: JSON.stringify({ mode: "CHALLENGE", count: 15, difficulty: 3 }) });
   const chView = (await api(`/api/sessions/${challenge.body.id}`)).body;
-  check(chView.questions.length === 8, "challenge session created");
+  check(chView.questions.length === 15 && chView.notice === null, "15-question challenge session created without a shortfall");
+  check(leaks(chView).length === 0, "challenge view reveals nothing about the answers");
   await answerAll(challenge.body.id, chView);
   await api(`/api/sessions/${challenge.body.id}/submit`, { method: "POST", body: "{}" });
   const chReport = (await api(`/api/sessions/${challenge.body.id}/report`)).body;
   const level3 = chReport.byDifficulty.find((d: any) => d.level === 3).total;
-  check(level3 >= 6, `challenge is mostly level 3 (${level3} of 8)`);
+  check(level3 === 15, `challenge is entirely level 3 (${level3} of 15)`);
+
+  // ---------------------------------------------------------------- concept practice
+  check(home.text.includes("Concept practice") && home.text.includes("Start concept practice"), "dashboard offers concept practice");
+  const concept = await api("/api/sessions", { method: "POST", body: JSON.stringify({ mode: "CONCEPT", count: 10, difficulty: "mixed", focus: "mixed" }) });
+  check(concept.status === 200, "concept session generated");
+  const coView = (await api(`/api/sessions/${concept.body.id}`)).body;
+  check(coView.questions.length === 10 && coView.reference === "closed" && coView.modeLabel === "Concept practice", "concept session: 10 closed-book questions");
+  check(leaks(coView).length === 0, `concept view reveals nothing about the answers (${leaks(coView).join(", ") || "clean"})`);
+  const typedKinds = new Set(coView.questions.flatMap((q: any) => q.options.map((o: any) => o.content?.type)).filter(Boolean));
+  check(typedKinds.size >= 2, `concept options are typed content (${[...typedKinds].join(", ")})`);
+  await answerAll(concept.body.id, coView, 0.6);
+  const coResumed = (await api(`/api/sessions/${concept.body.id}`)).body;
+  check(coResumed.questions.filter((q: any) => q.response.selectedKey).length === 6, "concept answers autosaved and resumed");
+  await api(`/api/sessions/${concept.body.id}/submit`, { method: "POST", body: "{}" });
+  await api(`/api/sessions/${concept.body.id}/submit`, { method: "POST", body: "{}" });
+  const coReport = (await api(`/api/sessions/${concept.body.id}/report`)).body;
+  check(coReport.concepts.total === 10 && coReport.overall.total === 10, "concept report built (double submit harmless)");
+  check(coReport.questions.every((q: any) => q.instance.concept?.steps.length > 0), "concept chains revealed after submission");
+  const focused = await api("/api/sessions", { method: "POST", body: JSON.stringify({ mode: "CONCEPT", count: 5, difficulty: 1, focus: "statements", topic: "ALM" }) });
+  const fView = (await api(`/api/sessions/${focused.body.id}`)).body;
+  check(focused.status === 200 && fView.focusLabel === "Statement analysis" && fView.questions.length >= 1, `focused concept session (${fView.questions.length} questions${fView.notice ? `, notice: ${fView.notice}` : ""})`);
+  const conceptPage = await api(`/session/${concept.body.id}/report`);
+  check(conceptPage.status === 200, "concept report page renders");
 
   // ---------------------------------------------------------------- formula practice and study conditions
   const formulasPage = await api("/formulas");
@@ -151,7 +178,8 @@ async function main() {
 
   // ---------------------------------------------------------------- remediation and transfer
   const dash = (await api("/api/history")).body;
-  check(dash.sessions.filter((s: any) => s.status === "SUBMITTED").length === before + 4, "history persists the four new submitted sessions");
+  check(dash.sessions.filter((s: any) => s.status === "SUBMITTED").length === before + 5, "history persists the five new submitted sessions");
+  check(dash.concepts.totals.attempts >= 10, "dashboard reports concept mastery");
   check(dash.remediation.due > 0, `remediation items opened (${dash.remediation.due} due)`);
   check(dash.misconceptions.length > 0, "most common misconceptions listed");
   check(dash.hypotheses.length === 12, "initial profile hypotheses evaluated");

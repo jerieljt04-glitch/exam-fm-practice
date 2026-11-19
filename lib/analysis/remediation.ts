@@ -1,4 +1,6 @@
 import type { Target } from "../engine/session";
+import { ANY_TEMPLATE_BY_ID } from "../engine/templates";
+import { isConceptItem } from "../engine/types";
 import { classifyAttempt, type AttemptRecord } from "./attempts";
 
 /**
@@ -10,6 +12,11 @@ import { classifyAttempt, type AttemptRecord } from "./attempts";
  *
  * A wrong answer at any stage sends the item back to stage 1. A correct answer
  * given with low confidence does not advance it.
+ *
+ * A conceptual failure (a wrong Concept Practice answer) opens a CONCEPT item.
+ * Its retests are drawn from the concept bank and must be conceptually
+ * different — another concept family or item format testing the same
+ * misconception or outcome — not the same question with new numbers.
  */
 
 export const REMEDIATION_DELAY_HOURS = 24;
@@ -18,7 +25,7 @@ export const REMEDIATION_SET_LIMIT = 12;
 export interface RemediationItemData {
   id?: string;
   target: string;
-  kind: "MISCONCEPTION" | "WEAK_REASONING";
+  kind: "MISCONCEPTION" | "WEAK_REASONING" | "CONCEPT";
   objective: string;
   sourceQuestionId: string;
   sourceTemplateId: string;
@@ -38,6 +45,9 @@ export function isDue(item: RemediationItemData, now: Date): boolean {
 function tests(item: RemediationItemData, attempt: AttemptRecord): boolean {
   if (attempt.questionId === item.sourceQuestionId) return false;
   if (item.kind === "MISCONCEPTION") return attempt.instance.options.some((o) => o.misconceptionTag === item.target);
+  if (item.kind === "CONCEPT") {
+    return isConceptItem(attempt.instance) && (attempt.instance.options.some((o) => o.misconceptionTag === item.target) || attempt.instance.objective === item.objective);
+  }
   return attempt.instance.objective === item.objective;
 }
 
@@ -76,11 +86,12 @@ export function applySession(existing: readonly RemediationItemData[], attempts:
       }
     }
 
-    // New mistakes open new items.
-    if (evidence.selectedMisconception && !items.some((i) => active(i) && i.kind === "MISCONCEPTION" && i.target === evidence.selectedMisconception)) {
+    // New mistakes open new items: conceptual failures as CONCEPT items, calculation mistakes as MISCONCEPTION items.
+    const kind: RemediationItemData["kind"] = isConceptItem(attempt.instance) ? "CONCEPT" : "MISCONCEPTION";
+    if (evidence.selectedMisconception && !items.some((i) => active(i) && i.kind === kind && i.target === evidence.selectedMisconception)) {
       const item: RemediationItemData = {
         target: evidence.selectedMisconception,
-        kind: "MISCONCEPTION",
+        kind,
         objective: attempt.instance.objective,
         sourceQuestionId: attempt.questionId,
         sourceTemplateId: attempt.instance.templateId,
@@ -121,8 +132,24 @@ export function remediationTargets(items: readonly RemediationItemData[], now: D
   const targets: Target[] = [];
   for (const item of due) {
     const avoidTemplates = [item.sourceTemplateId, ...item.attempts.map((a) => a.templateId)];
-    const target: Target =
-      item.kind === "MISCONCEPTION" ? { misconception: item.target, objective: item.objective, avoidTemplates } : { objective: item.objective, avoidTemplates };
+    let target: Target;
+    if (item.kind === "CONCEPT") {
+      const source = ANY_TEMPLATE_BY_ID[item.sourceTemplateId];
+      const family = source && source.kind === "choice" ? source.conceptFamily : undefined;
+      const format = source && source.kind === "choice" ? source.itemFormat : undefined;
+      target = {
+        misconception: item.target,
+        objective: item.objective,
+        avoidTemplates,
+        conceptual: true,
+        avoidFamilies: family ? [family] : [],
+        avoidFormats: format ? [format] : [],
+      };
+    } else if (item.kind === "MISCONCEPTION") {
+      target = { misconception: item.target, objective: item.objective, avoidTemplates };
+    } else {
+      target = { objective: item.objective, avoidTemplates };
+    }
     const copies = item.stage === 1 ? 2 : 1;
     for (let k = 0; k < copies && targets.length < REMEDIATION_SET_LIMIT; k += 1) targets.push(target);
   }

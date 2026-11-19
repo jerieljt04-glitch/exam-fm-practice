@@ -1,9 +1,21 @@
 import { REFERENCE_LABELS, type ReferenceMode } from "../reference";
 import { randomUUID } from "crypto";
 
-import { EXAM_STRUCTURE } from "../syllabus";
+import { EXAM_STRUCTURE, TOPIC_ORDER, type TopicId } from "../syllabus";
 import { getMisconception, MISCONCEPTION_CATEGORIES } from "../engine/misconceptions";
-import { DEFAULT_INTEGRATION_MIX, buildSession, type DifficultySetting, type IntegrationMix, type SessionMode, type Target } from "../engine/session";
+import {
+  CONCEPT_FOCUS_LABELS,
+  DEFAULT_INTEGRATION_MIX,
+  buildSession,
+  type ConceptFocus,
+  type DifficultySetting,
+  type IntegrationMix,
+  type SessionMode,
+  type Target,
+} from "../engine/session";
+import { isNumericAnswer } from "../engine/answers";
+import { recencyMaps } from "../engine/approach";
+import { answerTypeOfInstance, isConceptItem, itemFormatOf, practiceOf } from "../engine/types";
 import { CONFIDENCE_LEVELS, METHODS, REASONING_SKILLS, type Confidence, type ReasoningSkill } from "../engine/skills";
 import { toPublicQuestion, type PublicQuestion, type QuestionInstance } from "../engine/types";
 import { PROFILE_FOCUS_MISCONCEPTIONS } from "../profile";
@@ -13,6 +25,7 @@ import { applySession, isDue, remediationTargets, type RemediationItemData } fro
 import { buildReport, type DiagnosticReport, type SessionMeta } from "../analysis/report";
 import { skillProfile } from "../analysis/skills";
 import { formulaMastery } from "../analysis/formulas";
+import { conceptMastery } from "../analysis/concepts";
 import { llmConfigured, rewordStem } from "../llm/provider";
 import { acceptElapsed, isExpired } from "../timer";
 import { prisma } from "./db";
@@ -30,6 +43,9 @@ export interface CreateSessionInput {
   timed?: boolean;
   aiWording?: boolean;
   targets?: Target[];
+  /** Concept Practice: focus and optional topic filter. */
+  conceptFocus?: ConceptFocus;
+  topic?: TopicId | null;
 }
 
 export const MODE_DEFAULTS: Record<SessionMode, { count: number; difficulty: DifficultySetting; timed: boolean }> = {
@@ -37,6 +53,7 @@ export const MODE_DEFAULTS: Record<SessionMode, { count: number; difficulty: Dif
   EXAM: { count: EXAM_STRUCTURE.questionCount, difficulty: 1, timed: true },
   CHALLENGE: { count: 10, difficulty: 3, timed: false },
   PRACTICE: { count: 10, difficulty: "mixed", timed: false },
+  CONCEPT: { count: 10, difficulty: "mixed", timed: false },
   REMEDIATION: { count: 8, difficulty: "mixed", timed: false },
   TRANSFER: { count: 2, difficulty: "mixed", timed: false },
 };
@@ -46,6 +63,7 @@ export const MODE_LABELS: Record<SessionMode, string> = {
   EXAM: "Exam simulation",
   CHALLENGE: "Challenge",
   PRACTICE: "Formula practice",
+  CONCEPT: "Concept practice",
   REMEDIATION: "Remediation",
   TRANSFER: "Transfer check",
 };
@@ -67,15 +85,37 @@ export async function createSession(input: CreateSessionInput): Promise<string> 
   const difficulty = parseDifficulty(input.difficulty, defaults.difficulty);
   const timed = input.timed ?? defaults.timed;
   const durationSeconds = timed ? Math.round(count * SECONDS_PER_QUESTION) : null;
+  // Diagnostics, exams, challenges and Concept Practice are always closed book.
   const reference: ReferenceMode = input.mode === "PRACTICE" ? input.reference ?? "integration" : "closed";
   const integrationMix = input.mode === "PRACTICE" ? sanitizeMix(input.integrationMix) : undefined;
   const id = randomUUID();
 
+  const history = await attemptHistory();
   let probeSkills: Set<ReasoningSkill> | undefined;
   if (input.mode === "DIAGNOSTIC") {
-    const profile = skillProfile(await attemptHistory());
+    const profile = skillProfile(history);
     probeSkills = new Set(profile.filter((p) => p.observations < 3).map((p) => p.skill));
   }
+  // Lean toward weak and untested outcomes (concept mastery for Concept Practice, calculation mastery otherwise),
+  // and away from presentations seen in the last few sessions.
+  const outcomeRows =
+    input.mode === "CONCEPT"
+      ? conceptMastery(history).byOutcome.map((o) => ({ objective: o.objective, status: o.status }))
+      : masteryByObjective(history).map((o) => ({ objective: o.objective, status: o.status }));
+  const weakObjectives = new Set(outcomeRows.filter((o) => o.status === "WEAK").map((o) => o.objective));
+  const untestedObjectives = new Set(outcomeRows.filter((o) => o.status === "NOT_TESTED").map((o) => o.objective));
+  const recentSessions = [...new Set(history.map((a) => a.sessionId))].slice(-4);
+  const recent = new Set<string>();
+  history
+    .filter((a) => recentSessions.includes(a.sessionId))
+    .forEach((a) => {
+      recent.add(a.instance.templateId);
+      if (a.instance.kind === "choice") recent.add(`${a.instance.templateId}|${a.instance.variant}`);
+    });
+  // Solution approaches and templates from the last six sessions, weighted by recency.
+  const recency = recencyMaps(history);
+  const conceptFocus: ConceptFocus | undefined = input.mode === "CONCEPT" ? (input.conceptFocus && input.conceptFocus in CONCEPT_FOCUS_LABELS ? input.conceptFocus : "mixed") : undefined;
+  const topic = input.mode === "CONCEPT" && input.topic && TOPIC_ORDER.includes(input.topic) ? input.topic : null;
 
   const built = buildSession({
     mode: input.mode,
@@ -86,8 +126,21 @@ export async function createSession(input: CreateSessionInput): Promise<string> 
     probeSkills,
     targets: input.targets,
     integrationMix,
+    conceptFocus,
+    topic,
+    weakObjectives,
+    untestedObjectives,
+    recent,
+    recentApproaches: recency.approaches,
+    recentTemplates: recency.templates,
   });
-  if (!built.questions.length) throw new Error("No validated questions could be generated for this session.");
+  if (!built.questions.length) {
+    throw new Error(built.shortfall?.reason ?? "No validated questions could be generated for this session.");
+  }
+  // A shorter session is disclosed, never silently padded from another difficulty level.
+  const notice = built.shortfall
+    ? `${built.shortfall.reason} This session has ${built.shortfall.built} of the ${built.shortfall.requested} questions requested; no question was replaced by one from another difficulty level.`
+    : null;
 
   const questions: QuestionInstance[] = built.questions;
   const aiWording = Boolean(input.aiWording) && llmConfigured();
@@ -116,7 +169,7 @@ export async function createSession(input: CreateSessionInput): Promise<string> 
         difficulty: String(difficulty),
         timed,
         durationSeconds,
-        config: JSON.stringify({ count, aiWording, flagged: built.flagged, reference, integrationMix }),
+        config: JSON.stringify({ count: questions.length, requested: count, aiWording, flagged: built.flagged, reference, integrationMix, conceptFocus, topic, notice }),
       },
     }),
     prisma.sessionQuestion.createMany({
@@ -128,6 +181,9 @@ export async function createSession(input: CreateSessionInput): Promise<string> 
         family: q.family,
         topic: q.topic,
         difficulty: q.difficulty,
+        answerType: answerTypeOfInstance(q),
+        itemFormat: itemFormatOf(q),
+        practice: practiceOf(q),
         payload: JSON.stringify(q),
       })),
     }),
@@ -190,6 +246,10 @@ export interface SessionView {
   durationSeconds: number | null;
   elapsedSeconds: number;
   currentIndex: number;
+  /** Disclosed when the session is shorter than requested. */
+  notice: string | null;
+  /** Concept Practice focus label, when the session is one. */
+  focusLabel: string | null;
   questions: Array<PublicQuestion & { position: number; response: ResponseState }>;
 }
 
@@ -200,12 +260,15 @@ export async function getSessionView(id: string): Promise<SessionView | null> {
     await submitSession(id);
     return getSessionView(id);
   }
+  const config = JSON.parse(session.config) as { reference?: ReferenceMode; notice?: string | null; conceptFocus?: ConceptFocus };
   return {
     id: session.id,
     mode: session.mode as SessionMode,
-    modeLabel: MODE_LABELS[session.mode as SessionMode],
+    modeLabel: MODE_LABELS[session.mode as SessionMode] ?? session.mode,
     status: session.status as SessionView["status"],
-    reference: (JSON.parse(session.config).reference as ReferenceMode) ?? "closed",
+    notice: config.notice ?? null,
+    focusLabel: config.conceptFocus ? CONCEPT_FOCUS_LABELS[config.conceptFocus] : null,
+    reference: config.reference ?? "closed",
     difficulty: session.difficulty,
     timed: session.timed,
     durationSeconds: session.durationSeconds,
@@ -213,7 +276,7 @@ export async function getSessionView(id: string): Promise<SessionView | null> {
     currentIndex: session.currentIndex,
     // Only the stem and the option text leave the server while a session is active.
     questions: session.questions.map((row) => ({
-      ...toPublicQuestion(JSON.parse(row.payload) as QuestionInstance, { revealFormulas: JSON.parse(session.config).reference === "supported" }),
+      ...toPublicQuestion(JSON.parse(row.payload) as QuestionInstance, { revealFormulas: config.reference === "supported" }),
       position: row.position,
       response: {
         selectedKey: row.selectedKey,
@@ -293,20 +356,25 @@ export async function submitSession(id: string): Promise<void> {
   if (!session) throw new Error("Session not found.");
   if (session.status === "SUBMITTED") return;
   const now = new Date();
-  await prisma.$transaction([
-    ...session.questions.map((row) => {
+  // Idempotent: the status change is claimed atomically, so a repeated or concurrent submit
+  // (timer expiry racing the button, a retried request) scores and applies remediation once.
+  const claimed = await prisma.$transaction(async (tx) => {
+    const claim = await tx.session.updateMany({ where: { id, status: "ACTIVE" }, data: { status: "SUBMITTED", submittedAt: now } });
+    if (claim.count === 0) return false;
+    for (const row of session.questions) {
       const instance = JSON.parse(row.payload) as QuestionInstance;
       const selected = instance.options.find((o) => o.key === row.selectedKey);
-      return prisma.sessionQuestion.update({
+      await tx.sessionQuestion.update({
         where: { id: row.id },
         data: {
           isCorrect: Boolean(selected?.isCorrect),
           selectedMisconception: selected && !selected.isCorrect ? selected.misconceptionTag : null,
         },
       });
-    }),
-    prisma.session.update({ where: { id }, data: { status: "SUBMITTED", submittedAt: now } }),
-  ]);
+    }
+    return true;
+  });
+  if (!claimed) return;
 
   // Advance the remediation cycle with this session's evidence.
   const attempts = await attemptsForSession(id);
@@ -426,15 +494,33 @@ export async function getDashboard() {
     if (e.selectedMisconception) misconceptionCounts.set(e.selectedMisconception, (misconceptionCounts.get(e.selectedMisconception) ?? 0) + 1);
   });
 
-  // Recent improvement: SOA-standard accuracy, latest 20 attempts against the 20 before.
-  const standard = history.filter((a) => a.instance.difficulty === 1);
+  // Recent improvement: SOA-standard calculation accuracy, latest 20 attempts against the 20 before.
+  // Challenge sessions and Concept Practice are measured separately and never enter this figure.
+  const standard = history.filter((a) => a.instance.difficulty === 1 && a.mode !== "CHALLENGE" && !isConceptItem(a.instance));
   const window = (list: AttemptRecord[]) => (list.length ? list.filter((a) => a.isCorrect).length / list.length : null);
   const recent = standard.slice(-20);
   const before = standard.slice(-40, -20);
 
   const formulas = formulaMastery(history);
+  const concepts = conceptMastery(history);
+  const numeric = history.filter((a) => isNumericAnswer(answerTypeOfInstance(a.instance)));
+  const typed = history.filter((a) => !isNumericAnswer(answerTypeOfInstance(a.instance)));
+  const formatRows = new Map<string, { total: number; correct: number }>();
+  history.forEach((a) => {
+    const key = itemFormatOf(a.instance);
+    const row = formatRows.get(key) ?? { total: 0, correct: 0 };
+    row.total += 1;
+    if (a.isCorrect) row.correct += 1;
+    formatRows.set(key, row);
+  });
 
   return {
+    concepts,
+    formats: {
+      numerical: { total: numeric.length, correct: numeric.filter((a) => a.isCorrect).length },
+      nonNumerical: { total: typed.length, correct: typed.filter((a) => a.isCorrect).length },
+      byFormat: [...formatRows.entries()].map(([format, row]) => ({ format, ...row })).sort((a, b) => b.total - a.total),
+    },
     llm: llmConfigured(),
     formulaStatus: formulas.formulas.reduce<Record<string, number>>((acc, f) => ({ ...acc, [f.status]: (acc[f.status] ?? 0) + 1 }), {}),
     weakFormulas: formulas.formulas.filter((f) => f.status === "WEAK").map((f) => ({ id: f.formula, name: f.name, reason: f.reason })),
@@ -447,7 +533,7 @@ export async function getDashboard() {
       return {
         id: s.id,
         mode: s.mode as SessionMode,
-        modeLabel: MODE_LABELS[s.mode as SessionMode],
+        modeLabel: MODE_LABELS[s.mode as SessionMode] ?? s.mode,
         status: s.status,
         difficulty: s.difficulty,
         createdAt: s.createdAt.toISOString(),
@@ -483,7 +569,13 @@ export async function getDashboard() {
         .filter((i) => i.status !== "RESOLVED")
         .map((i) => ({
           id: i.id!,
-          label: i.kind === "MISCONCEPTION" ? getMisconception(i.target)?.label ?? i.target : `Weak reasoning: ${i.objective}`,
+          label:
+            i.kind === "MISCONCEPTION"
+              ? getMisconception(i.target)?.label ?? i.target
+              : i.kind === "CONCEPT"
+                ? `Concept: ${getMisconception(i.target)?.label ?? i.target}`
+                : `Weak reasoning: ${i.objective}`,
+          kind: i.kind,
           stage: i.stage,
           status: i.status,
           dueAt: i.dueAt,

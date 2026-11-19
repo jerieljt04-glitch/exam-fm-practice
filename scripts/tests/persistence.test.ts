@@ -82,7 +82,65 @@ test("study conditions: practice sessions keep their reference mode; diagnostics
 
   await repo.submitSession(hidden);
   const report = (await repo.getReport(hidden))!;
-  expect(report.questions.every((q) => q.instance.chain.steps.length > 0), "chains revealed in the report after submission");
+  expect(report.questions.every((q) => (q.instance.chain?.steps.length ?? 0) > 0), "chains revealed in the report after submission");
   expect(report.chains.byLevel.reduce((a, r) => a + r.total, 0) === 5, "report groups practice questions by integration level");
+  await repo.resetHistory();
+});
+
+test("concept sessions persist typed options; legacy rows resume; submission is idempotent; reports are stable", async () => {
+  const repo = await import("../../lib/server/repository");
+  const { prisma } = await import("../../lib/server/db");
+  const { buildQuestion } = await import("../../lib/engine/assemble");
+  const { TEMPLATE_BY_ID } = await import("../../lib/engine/templates");
+  await repo.resetHistory();
+
+  // A Concept Practice session round-trips its typed options and stores the new columns.
+  const id = await repo.createSession({ mode: "CONCEPT", count: 5, difficulty: "mixed", conceptFocus: "mixed" });
+  const view = (await repo.getSessionView(id))!;
+  expect(view.questions.length === 5 && view.reference === "closed" && view.notice === null, "concept session created closed-book with five questions");
+  expect(view.questions.every((q) => q.options.length === 5), "five options each");
+  expect(view.questions.some((q) => q.options.some((o) => o.content && o.content.type !== "numeric")), "typed option content reaches the client");
+  const rows = await prisma.sessionQuestion.findMany({ where: { sessionId: id } });
+  expect(rows.every((r) => r.practice === "concept" && r.answerType !== "numeric"), "practice and answer-type columns stored");
+  const stored = JSON.parse(rows[0].payload);
+  expect(JSON.stringify(stored.options.map((o: { content: unknown }) => o.content)) === JSON.stringify(JSON.parse(JSON.stringify(stored.options.map((o: { content: unknown }) => o.content)))), "rich options serialise and deserialise unchanged");
+
+  await repo.saveProgress(id, { answers: view.questions.map((q) => ({ instanceId: q.instanceId, selectedKey: "A", confidence: "MEDIUM" })) });
+  // Two submits at once (timer expiry racing the button) score once and open remediation once.
+  await Promise.all([repo.submitSession(id), repo.submitSession(id), repo.submitSession(id)]);
+  const items = await prisma.remediationItem.findMany();
+  const targets = items.map((i) => `${i.kind}|${i.target}`);
+  expect(new Set(targets).size === targets.length, "concurrent submits duplicated remediation items");
+  const first = JSON.stringify(await repo.getReport(id));
+  await prisma.$disconnect();
+  const again = JSON.stringify(await repo.getReport(id));
+  expect(first === again, "report changed after reconnecting");
+  const report = (await repo.getReport(id))!;
+  expect(report.concepts.total === 5 && report.formats.practice.some((p) => p.kind === "concept"), "concept report sections");
+
+  // A session stored before the rich answer model: legacy payload, default columns, still in progress.
+  const instance = buildQuestion(TEMPLATE_BY_ID["loan-level-balance"], 1, "legacy-row").instance!;
+  const legacy = JSON.parse(JSON.stringify(instance));
+  for (const key of ["kind", "answerType", "itemFormat", "practice", "calibration"]) delete legacy[key];
+  legacy.options.forEach((o: Record<string, unknown>) => ["content", "conditionTrue", "conceptStage", "conceptFailure", "confusedWith", "probe", "check"].forEach((k) => delete o[k]));
+  await prisma.session.create({ data: { id: "legacy-session", mode: "DIAGNOSTIC", status: "ACTIVE", difficulty: "mixed", timed: false, config: JSON.stringify({ count: 1, reference: "closed" }) } });
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO SessionQuestion (id, sessionId, position, templateId, family, topic, difficulty, payload, working, flagged, timeSpentSeconds) VALUES (?, 'legacy-session', 0, ?, ?, ?, 1, ?, '', 0, 0)`,
+    legacy.instanceId,
+    legacy.templateId,
+    legacy.family,
+    legacy.topic,
+    JSON.stringify(legacy)
+  );
+  const legacyRow = await prisma.sessionQuestion.findUnique({ where: { id: legacy.instanceId } });
+  expect(legacyRow?.answerType === "numeric" && legacyRow?.practice === "calculation", "legacy row gets the numeric defaults");
+  const resumed = (await repo.getSessionView("legacy-session"))!;
+  expect(resumed.status === "ACTIVE" && resumed.questions[0].options.every((o) => o.content === undefined && /\d/.test(o.display)), "legacy in-progress session resumes with numeric options");
+  await repo.saveProgress("legacy-session", { answers: [{ instanceId: legacy.instanceId, selectedKey: legacy.correctKey, confidence: "HIGH" }] });
+  await repo.submitSession("legacy-session");
+  const legacyReport = (await repo.getReport("legacy-session"))!;
+  expect(legacyReport.overall.correct === 1 && legacyReport.formats.byFormat[0]?.format !== undefined, "legacy session scored and reported");
+  const dash = await repo.getDashboard();
+  expect(dash.concepts.totals.attempts === 5 && dash.sessions.some((s) => s.modeLabel === "Concept practice"), "dashboard shows concept mastery and the concept session");
   await repo.resetHistory();
 });

@@ -1,6 +1,7 @@
 import { chainPairs } from "../formulas/graph";
 import { FORMULAS, FORMULA_BY_ID } from "../formulas/registry";
 import { AREA_LABELS, type FormulaArea } from "../formulas/types";
+import { isConceptItem } from "../engine/types";
 import { classifyAttempt, type AttemptEvidence, type AttemptRecord } from "./attempts";
 
 /**
@@ -53,7 +54,7 @@ export interface CombinationMastery {
 type StepOutcome = "pass" | "fail" | "unknown";
 
 function stepOutcomes(attempt: AttemptRecord, e: AttemptEvidence): StepOutcome[] {
-  const n = attempt.instance.chain.steps.length;
+  const n = attempt.instance.chain?.steps.length ?? 0;
   if (!e.answered || (e.correct && e.quality === "POSSIBLE_GUESS")) return Array(n).fill("unknown");
   if (e.correct) return Array(n).fill("pass");
   const k = e.chainStage ?? n - 1;
@@ -78,8 +79,10 @@ export function formulaMastery(history: readonly AttemptRecord[]): { formulas: F
 
   const ordered = [...history].sort((a, b) => a.submittedAt.localeCompare(b.submittedAt) || a.position - b.position);
   for (const attempt of ordered) {
+    // Concept items never count as formula use: understanding a relationship is not applying a formula.
+    if (isConceptItem(attempt.instance)) continue;
     const e = classifyAttempt(attempt);
-    const steps = attempt.instance.chain.steps;
+    const steps = attempt.instance.chain?.steps ?? [];
     const outcomes = stepOutcomes(attempt, e);
     const distinct = new Set(steps.map((s) => s.formula)).size;
     steps.forEach((step, idx) => {

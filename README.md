@@ -15,7 +15,9 @@ npm run dev            # http://localhost:3000
 ```
 
 No database server or API key is needed. History is stored in a local SQLite file,
-`data/exam-fm.db`, created automatically by `npm run dev` / `npm start`.
+`data/exam-fm.db`, created automatically by `npm run dev` / `npm start`. When the schema changes,
+setup first copies the database to `data/backups/` and applies only non-destructive changes
+(Prisma refuses anything that would drop data); history is never reset.
 
 Production server: `npm run build && npm start`.
 
@@ -34,9 +36,10 @@ dashboard. Re-run `npm run app:build` after moving the project folder.
 | Mode | Purpose |
 | --- | --- |
 | **Diagnostic** | Untimed, mixed, unlabelled. Default 15 questions; length and difficulty adjustable. Leans toward skills your history has not tested yet. |
-| **Exam simulation** | 30 questions, 150 minutes, five options, topic split 3/7/6/6/8 (inside every published weight band). |
-| **Challenge** | Harder-than-exam reasoning inside the syllabus. Scored separately from SOA-standard work. |
-| **Formula practice** | Questions chosen by how many formulas they connect (integration levels 1–5), default mix 20% single formula / 40% two formulas / 30% three or more / 10% reconstruction or derivation, adjustable on the dashboard. |
+| **Exam simulation** | 30 SOA-standard questions, 150 minutes, five options, topic split 3/7/6/6/8 (inside every published weight band). About a quarter of the items are conceptual, symbolic, statement or composite-answer items (configurable in `lib/engine/style.ts`; not an official SOA distribution). |
+| **Challenge** | Harder-than-exam reasoning inside the syllabus. Every question is Level 3: a shortage produces a shorter, disclosed session — never an easier question. Scored separately from SOA-standard work. |
+| **Formula practice** | Practice retrieving, connecting, rearranging and deriving formulas. Questions chosen by how many formulas they connect (integration levels 1–5), default mix 20% single formula / 40% two formulas / 30% three or more / 10% reconstruction or derivation, adjustable on the dashboard. |
+| **Concept practice** | Test whether you understand what the formulas mean, when they apply, and how financial quantities relate. 5–20 questions; SOA standard, Advanced, Challenge or mixed; focus on mixed concepts, definitions and interpretation, equations and notation, statement analysis, or error diagnosis; optional topic filter; closed book. Scored into concept mastery, separately from formula mastery. |
 | **Remediation** | Built from your mistakes: two new problems on the same principle from different templates, then a retest after 24 hours. |
 | **Transfer check** | From any reviewed question: two questions testing the same principle in a different context. |
 
@@ -104,16 +107,111 @@ combination and an unfamiliar one — reproducing it is not enough.
 The **Visual lab** (`/lab`) has interactive loan amortization (with refinancing), annuity, bond,
 duration/convexity/Redington, arithmetic-versus-geometric and free-form cash-flow explorers.
 
+## Study area: formula memorisation and concepts
+
+`/study` (also linked from the dashboard and the header) is for *learning with instant feedback*,
+separate from the closed-book sessions. Its answers are stored in two additive tables
+(`StudyCard`, `StudyAttempt`) and never count toward formula, concept or calculation mastery.
+
+| Tool | What it does |
+| --- | --- |
+| **Formula flashcards** (`/study/flashcards`) | Every formula in the library (both sheets) as two cards: *recall* (name and purpose → write the formula) and *recognise* (formula → name, use and conditions). The back shows the formula, each sheet's own notation with its PDF page, symbols, assumptions, common misuse and a memory hook. Optional write-it-out box with LaTeX preview. Spaced repetition (`lib/study/schedule.ts`, an SM-2 variant): Again / Hard / Good / Easy, keys `space` and `1`–`4`; a forgotten card returns later in the same round. Filter by sheet section and direction; cram mode reviews a whole selection. Formulas of unclear syllabus relevance are off by default. |
+| **Concept flashcards** | Every concept in `lib/concepts/` — explain it, then compare with the summary and the ideas it is confused with. |
+| **Formula drill** (`/study/drill`) | 49 formulas, each beside three near-misses (i for d, n − t for n − t + 1, a for ä, a missing root, a flipped ratio). Each wrong form says what it actually computes. `lib/study/drill.ts` carries numerical evaluators: the tests require the correct form to match an independent computation (cash flows summed one by one, schedules simulated, rates by bisection, derivatives by finite differences) and every near-miss to differ from it. |
+| **Quick checks** (`/study/concepts`) | 116 true/false statements on what the formulas mean, when they apply and which way quantities move, each with the reason and the sheet page. 54 quantitative ones carry a `check` that the tests evaluate against the stated verdict. |
+| **Concept questions with feedback** (`/study/concepts?tab=questions`) | One question at a time from the validated Concept Practice bank (filter by topic, focus, level), with the full explanation — why each option is right or wrong, the concept chain and the transfer principle — as soon as you answer. |
+
+The hub tracks due cards, card maturity, accuracy by topic for each tool, the cards forgotten most
+and the formulas missed in the drill. Missed drill items and quick checks can be re-drilled on
+their own until answered correctly.
+
+## Answer types and Concept Practice
+
+Answer choices are typed content (`lib/engine/answers.ts`), not free HTML:
+
+| Type | Used for |
+| --- | --- |
+| numeric | money, percentages, plain numbers, times and period counts |
+| text | definitions, classifications, interpretations, correct-statement items (prose with inline mathematics) |
+| math | formulas, equations of value, symbolic relationships, inequalities and conditions |
+| statements | "I only", "I and III only", "I, II, and III", "None" — over numbered statements shown with the question |
+| composite | ordered pairs, portfolio allocations, several cash-flow amounts |
+| table | small tables |
+
+Questions can also carry exhibits — tables and cash-flow schedules, and the numbered statements.
+Questions stored before this model have no typed content; they are read as the numeric variant,
+so every old session, report and mastery record still opens unchanged.
+
+**Concept Practice** items are built from a *concept chain* — the concepts required (registry in
+`lib/concepts/`), the reasoning sequence, the conditions it relies on — and every wrong option is
+placed at the step where its reasoning fails, with the kind of failure (recognition,
+interpretation, selection, application, connection or conclusion), the concept it confuses and,
+where useful, the condition under which it would be true. The ten families are definition,
+formula applicability, equation construction, relationships and comparative statics, statement
+analysis, interpretation, error diagnosis, notation, timeline reasoning and cross-topic concepts.
+After submission each concept question shows why the right choice is right and every other one
+wrong, the statement truth table, the applicable relationship, a boundary case, the transfer
+principle, the learning outcomes and the misconception and failure type of your choice. A wrong
+concept answer opens a remediation item whose retest is a *different kind* of question on the
+same idea (another family or format), not the same question with new numbers.
+
+**Concept mastery** (`lib/analysis/concepts.ts`) is tracked by topic, learning outcome, concept and
+ten dimensions (terminology, interpretation, conditions, applicability, equation construction,
+timing, rate conversion, relationships, error recognition, transfer), with weak concepts,
+frequently confused concept pairs, conceptual misconceptions, improvement over time and concept
+versus calculation accuracy. Concept items never count toward formula mastery or calculation
+mastery, and calculation items never count toward concept mastery.
+
+Authoring rules for all question kinds: `docs/authoring.md`.
+
+## Difficulty calibration
+
+Every question records a structural calibration (`lib/engine/calibration.ts`): stem length,
+reasoning steps, connected formulas and concepts, inverse structure, valuation dates,
+unfamiliarity, multi-concept, reconstruction, answer type, calculator burden and an expected-time
+band — the first group measured from the item, the last two inferred. `docs/difficulty-rubric.md`
+defines the SOA-standard, Advanced and Challenge targets; tests require every Level-1 and
+Level-3 question to meet them. `npm run report:calibration` summarises the whole bank by topic,
+outcome, difficulty, format, steps, formulas, concepts, integration level, presentation,
+expected time and distractor category, and checks outcome coverage.
+
+## Different reasoning every exam, not different numbers
+
+Re-taking an exam should not mean re-doing the same steps with new numbers. Two mechanisms
+prevent it:
+
+- **Solution-approach memory** (`lib/engine/approach.ts`). Every calculation question is
+  fingerprinted by its solution route — the formulas in order, how each is used (rearranged or
+  derived) and the algebraic methods. No exam repeats a route while another is available, and each
+  new session steers away from the routes (and templates) used in the last six submitted sessions,
+  with the most recent weighted heaviest. When a template can produce more than one route, a fresh
+  one is drawn first.
+- **Solution-approach bank** (`lib/engine/templates/approach-*.ts`): 13 templates on familiar
+  syllabus topics, each reaching the answer by a route the rest of the bank does not use, at all
+  three levels so they reach the timed exam simulation too. Examples: the stated growth factor used
+  as the unit of time (the rate is never found); the rate from the ratio of two years' interest; a
+  decreasing annuity from the `(Ia) + (Da) = (n+1)a` identity at an unstated rate; the rate from
+  `1/a − 1/s = i` with no stated term; a perpetuity split whose condition is a quadratic in `vⁿ`;
+  a loan from one payment's interest and another payment's principal; the loan rate from two
+  outstanding balances; equal-principal (non-level) repayment; Makeham's formula with no stated
+  term; the yield from two bonds' premium and discount; a yield read back from a perpetuity's
+  duration; a duration updated by PV-weighting; and the IRR used as an input to recover unknown
+  cash flows.
+
+The design follows SOA sample-question practice and item-writing research: difficulty should come
+from recognising structure and choosing a method (inverse problems, hidden relationships, two
+partial facts combined into a system, unstated quantities that are not needed), not from heavier
+arithmetic or unclear wording, and wrong options come from real misconceptions.
+
 ## How questions are generated and validated
 
-The bank has 52 parameterised templates (101 template × difficulty combinations), including five
-single-formula templates for the level-1 share of formula practice and eight
-formula-integration templates (bond price → forward rate, an unknown refinancing rate, an
-equivalent level annuity, a payoff between payment dates, a business valued as a growing stream,
-two annuities solved simultaneously, growing deposits every few years, and a price change built
-from scratch), across all five
-syllabus areas, and every wrong option is produced by one of 64 catalogued misconceptions — never
-by spacing numbers around the answer. A template supplies, for each question:
+The bank has 222 parameterised templates: 77 numerical templates — including the single-formula and
+formula-integration templates and 12 Challenge templates added so every learning outcome has Level-3
+coverage — 12 composite calculation templates (ordered pairs, portfolio allocations, table-driven and
+cash-flow-schedule items) and 133 Concept Practice templates covering all 42 learning outcomes at
+SOA-standard and higher levels. Every wrong option is produced by a catalogued misconception —
+never by spacing numbers around the answer. `docs/calibration-report.md` gives the counts by topic,
+outcome, level, format and family. A numerical template supplies, for each question:
 
 - the answer and the arithmetic that produces it (`calc`);
 - an **independent equation of value** (`model`) written from explicit cash flows, not closed forms;
@@ -132,9 +230,19 @@ A draft that fails any check is regenerated with a new seed; a template that can
 flagged and skipped. Nothing unvalidated reaches a session, and every question stores its
 validation record (shown at the foot of each question review).
 
-`npm run test:sympy` additionally re-derives a sample of the bank (303 questions) in Python with SymPy at 40-digit
-precision — every option, every displayed rounding, and the equation of value — independently of
-the TypeScript engine.
+Typed questions pass `lib/engine/validate-choice.ts`: statement truth values are re-derived from
+quantitative checks and the correct combination must be exactly the true statements; equation and
+expression options are probed numerically so that exactly one defines the reference quantity and
+equivalent equations are rejected; option claims must hold for the correct option only; composite
+answers are recomputed component by component against an independent reference; options must be
+distinct after normalisation, of one type and format, tied to five different misconceptions, and
+the correct option may not stand out by length; concept chains must place every distractor at a
+real step.
+
+`npm run test:sympy` additionally re-derives a sample of the bank in Python with SymPy at 40-digit
+precision — every numeric and composite option, every displayed rounding, every equation of value,
+every quantitative statement and option claim, and every equation probe — independently of the
+TypeScript engine.
 
 ### Optional language-model wording
 
@@ -146,8 +254,11 @@ Otherwise the validated original is used. The key is used only on the server.
 ## Tests
 
 ```bash
-npm test               # unit, bank, trap, session and persistence tests, then the SymPy check
-npm run validate:bank  # stress-build every template level (default 40 seeds: `validate:bank -- "" 150`)
+npm test               # unit, bank, concept, session and persistence tests, then the SymPy check
+npm run validate:bank  # stress-build every numerical template level (default 40 seeds: `validate:bank -- "" 150`)
+npm run validate:choice  # stress-build every typed template × level × variant (`validate:choice -- con-alm 30`)
+npm run report:calibration  # bank calibration and coverage report (`-- docs/calibration-report.md 3` to write it)
+npm run test:migration # migrate a COPY of data/exam-fm.db and open every stored session and report
 npm run typecheck
 npm run lint
 ```
@@ -171,8 +282,12 @@ lib/syllabus.ts            syllabus data: topics, weights, outcomes, exam struct
 lib/profile.ts             starting diagnostic hypotheses
 lib/formulas/              formula registry (from the two sheets) and relationship graph
 lib/reference.ts           closed / supported / integration reference modes
-lib/engine/                finance maths, expression engine, misconceptions, validator,
-                           assembly, session builder, templates/ (the question bank)
+lib/engine/                finance maths, expression engine, misconceptions (+ misconceptions-extra/),
+                           answers.ts (answer model), validators, calibration, style mix, assembly,
+                           session builder, templates/ (numerical and composite bank),
+                           concepts/ (Concept Practice bank and authoring kit)
+lib/concepts/              concept registry used by concept chains and concept mastery
+docs/                      authoring contract, difficulty rubric, calibration report
 lib/analysis/              evidence, reasoning profile, report, mastery, formula mastery, remediation
 lib/server/                SQLite (Prisma) repository
 lib/llm/provider.ts        optional rewording, checked before use

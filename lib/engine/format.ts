@@ -55,6 +55,8 @@ export function formatAnswer(value: number, format: AnswerFormat): string {
       return `${num(value * 100, format.decimals)}%`;
     case "number":
       return `${num(value, format.decimals)}${format.unit ? ` ${format.unit}` : ""}`;
+    case "time":
+      return `${num(value, format.decimals)} ${format.unit}`;
   }
 }
 

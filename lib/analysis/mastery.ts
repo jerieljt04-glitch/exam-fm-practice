@@ -1,5 +1,6 @@
 import { OUTCOMES, TOPIC_LABELS, type TopicId } from "../syllabus";
 import { isUnsure } from "../engine/skills";
+import { isConceptItem } from "../engine/types";
 import { INITIAL_HYPOTHESES, type Hypothesis } from "../profile";
 import { classifyAttempt, categoryOf, type AttemptRecord } from "./attempts";
 import { skillProfile } from "./skills";
@@ -70,9 +71,15 @@ export function masteryStatus(attempts: readonly AttemptRecord[]): { status: Mas
   return { status: "DEVELOPING", reason: `${correct} of ${sorted.length} correct; ${templates.size} presentation${templates.size === 1 ? "" : "s"} answered securely.` };
 }
 
+/**
+ * Learning-outcome mastery from calculation items. Concept Practice items are
+ * tracked separately (lib/analysis/concepts.ts), so a correct concept answer
+ * never counts as calculation mastery and vice versa.
+ */
 export function masteryByObjective(history: readonly AttemptRecord[]): MasteryEntry[] {
+  const calculation = history.filter((a) => !isConceptItem(a.instance));
   return Object.values(OUTCOMES).map((outcome) => {
-    const attempts = history.filter((a) => a.instance.objective === outcome.id);
+    const attempts = calculation.filter((a) => a.instance.objective === outcome.id);
     const { status, reason } = masteryStatus(attempts);
     const standard = attempts.filter((a) => a.instance.difficulty === 1);
     const challenge = attempts.filter((a) => a.instance.difficulty === 3);

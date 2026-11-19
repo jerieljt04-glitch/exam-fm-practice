@@ -1,3 +1,4 @@
+import { approachOf, recencyMaps } from "../../lib/engine/approach";
 import { buildQuestion } from "../../lib/engine/assemble";
 import { buildSession } from "../../lib/engine/session";
 import { TEMPLATE_BY_ID } from "../../lib/engine/templates";
@@ -11,6 +12,28 @@ import { checkRewording } from "../../lib/llm/provider";
 import { EXAM_DISTRIBUTION, distributionFor } from "../../lib/syllabus";
 import { acceptElapsed, formatClock, isExpired, remainingSeconds } from "../../lib/timer";
 import { expect, test } from "./harness";
+
+test("solution approaches: no exam repeats one, and consecutive exams steer away from the last exam's", () => {
+  const history: { sessionId: string; instance: QuestionInstance }[] = [];
+  let previous: Set<string> | null = null;
+  const overlaps: number[] = [];
+  for (let s = 0; s < 4; s += 1) {
+    const recency = recencyMaps(history);
+    const { questions } = buildSession({ mode: "EXAM", count: 30, difficulty: 1, seed: `approach-${s}`, recentApproaches: recency.approaches, recentTemplates: recency.templates });
+    const calc = questions.filter((q) => q.kind !== "choice" || q.practice === "calculation");
+    const approaches = calc.map(approachOf);
+    expect(new Set(approaches).size === approaches.length, `exam ${s}: a solution approach repeats inside one exam`);
+    if (previous) overlaps.push(approaches.filter((a) => previous!.has(a)).length / approaches.length);
+    previous = new Set(approaches);
+    questions.forEach((q) => history.push({ sessionId: `S${s}`, instance: q }));
+  }
+  const mean = overlaps.reduce((a, b) => a + b, 0) / overlaps.length;
+  expect(mean <= 0.35, `on average ${(mean * 100).toFixed(0)}% of an exam's solution approaches repeat the previous exam's`);
+  // Every approach-bank template reaches the standard-level pool used by the exam simulation.
+  for (const id of ["apx-tvm-power-unit", "apx-ann-ia-da", "apx-loan-first-last", "apx-bond-makeham", "apx-alm-irr-inverse"]) {
+    expect(TEMPLATE_BY_ID[id]?.levels.includes(1) === true, `${id} is not available at the SOA-standard level`);
+  }
+});
 
 test("exam simulation follows the 3/7/6/6/8 distribution with no repeated template", () => {
   for (let s = 0; s < 6; s += 1) {
@@ -37,7 +60,7 @@ test("diagnostic, challenge and mixed sessions", () => {
   expect(new Set(diag.questions.map((q) => q.difficulty)).size >= 2, "mixed difficulty spans levels");
   const challenge = buildSession({ mode: "CHALLENGE", count: 10, difficulty: 3, seed: "chal" });
   expect(challenge.questions.length === 10, "challenge has 10 questions");
-  expect(challenge.questions.filter((q) => q.difficulty === 3).length >= 7, "challenge is mostly level 3");
+  expect(challenge.questions.every((q) => q.difficulty === 3), "challenge is entirely level 3");
 });
 
 test("remediation targets set the same trap in a different template", () => {
@@ -59,7 +82,7 @@ test("remediation targets set the same trap in a different template", () => {
 test("the public view of a question reveals nothing about the answer", () => {
   const q = buildQuestion(TEMPLATE_BY_ID["bond-price"], 1, "public").instance!;
   const view = toPublicQuestion(q);
-  expect(JSON.stringify(Object.keys(view)) === JSON.stringify(["instanceId", "stem", "options"]), "unexpected keys in public view");
+  expect(JSON.stringify(Object.keys(view)) === JSON.stringify(["instanceId", "stem", "options"]), `unexpected keys in public view: ${Object.keys(view)}`);
   expect(view.options.every((o) => Object.keys(o).join() === "key,display"), "options carry more than key and display");
 });
 

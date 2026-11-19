@@ -10,9 +10,18 @@ data
 .env.local
 .env.*.local
 
+# Local databases and their backups (personal study history)
+*.db
+prisma/backups/
+
 .eslintcache
 .DS_Store
 
 # python
 __pycache__/
 *.pyc
+
+# iCloud: keep dependencies and build output out of sync/eviction (symlinked)
+node_modules.nosync
+.next.nosync
+node_modules.icloud-old

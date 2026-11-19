@@ -1,7 +1,26 @@
 import { TOPIC_LABELS, TOPIC_ORDER, type TopicId } from "../syllabus";
 import { getMisconception, MISCONCEPTION_CATEGORIES, type MisconceptionCategory } from "../engine/misconceptions";
 import { CONFIDENCE_LABELS, CONFIDENCE_LEVELS, isConfident, isUnsure, type Confidence } from "../engine/skills";
-import { CHAIN_ERROR_LABELS, DIFFICULTY_LABELS, INTEGRATION_LABELS, type ChainErrorKind, type Difficulty, type IntegrationLevel, type QuestionInstance } from "../engine/types";
+import {
+  CHAIN_ERROR_LABELS,
+  CONCEPT_FAILURE_LABELS,
+  CONCEPT_FAILURES,
+  DIFFICULTY_LABELS,
+  INTEGRATION_LABELS,
+  ITEM_FORMAT_LABELS,
+  answerTypeOfInstance,
+  itemFormatOf,
+  type ChainErrorKind,
+  type ConceptFailure,
+  type Difficulty,
+  type IntegrationLevel,
+  type ItemFormat,
+  type QuestionInstance,
+} from "../engine/types";
+import { ANSWER_TYPE_LABELS, isNumericAnswer, type AnswerType } from "../engine/answers";
+import { calibrate } from "../engine/calibration";
+import { getConcept } from "../concepts/registry";
+import { conceptItem } from "./concepts";
 import { FORMULA_BY_ID } from "../formulas/registry";
 import { CAUSE_LABELS, QUALITY_LABELS, classifyAttempt, type AttemptEvidence, type AttemptRecord, type ErrorCause } from "./attempts";
 import { skillProfile, type SkillScore } from "./skills";
@@ -73,6 +92,24 @@ export interface DiagnosticReport {
     byKind: { kind: ChainErrorKind; label: string; count: number; positions: number[] }[];
     breaks: { position: number; stage: number; steps: number; formula: string; formulaName: string; kind: ChainErrorKind; wrongFormula: string | null }[];
     formulas: { formula: string; name: string; count: number; positions: number[] }[];
+  };
+  /** Performance by question format and answer type, time by format and difficulty, and reasoning depth. */
+  formats: {
+    split: { kind: "numerical" | "non-numerical"; label: string; total: number; correct: number; averageSeconds: number }[];
+    practice: { kind: "calculation" | "concept"; label: string; total: number; correct: number }[];
+    byFormat: { format: ItemFormat; label: string; total: number; correct: number; averageSeconds: number }[];
+    byAnswerType: { type: AnswerType; label: string; total: number; correct: number }[];
+    time: { format: ItemFormat; label: string; level: Difficulty; total: number; averageSeconds: number }[];
+    /** Accuracy by number of reasoning steps (structural calibration); shown for challenge work. */
+    depth: { steps: string; total: number; correct: number; averageSeconds: number }[];
+  };
+  /** Concept items in this session: where reasoning failed, concepts missed and confused. */
+  concepts: {
+    total: number;
+    correct: number;
+    byFailure: { kind: ConceptFailure; label: string; count: number; positions: number[] }[];
+    missed: { id: string; label: string; positions: number[] }[];
+    confused: { a: string; aLabel: string; b: string; bLabel: string; positions: number[] }[];
   };
   questions: QuestionReview[];
   remediation: { misconception: string; label: string; count: number; principle: string }[];
@@ -203,6 +240,8 @@ export function buildReport(meta: SessionMeta, attempts: readonly AttemptRecord[
       ],
     },
     chains: chainSummary(ordered, evidence, positionOf),
+    formats: formatSummary(ordered, evidence),
+    concepts: conceptSummary(ordered, evidence, positionOf),
     questions: ordered.map((a, idx) => ({
       position: a.position + 1,
       instance: a.instance,
@@ -231,7 +270,7 @@ function chainSummary(ordered: AttemptRecord[], evidence: AttemptEvidence[], pos
     breaks.push({
       position: positionOf(idx),
       stage: e.chainStage,
-      steps: a.instance.chain.steps.length,
+      steps: a.instance.chain?.steps.length ?? 0,
       formula: e.chainFormula,
       formulaName: FORMULA_BY_ID[e.chainFormula]?.name ?? e.chainFormula,
       kind: e.chainError ?? "application",
@@ -257,5 +296,97 @@ function chainSummary(ordered: AttemptRecord[], evidence: AttemptEvidence[], pos
       .sort((a, b) => b.count - a.count),
     breaks,
     formulas: [...formulaMap.entries()].map(([formula, positions]) => ({ formula, name: FORMULA_BY_ID[formula]?.name ?? formula, count: positions.length, positions })).sort((a, b) => b.count - a.count),
+  };
+}
+
+const avg = (values: number[]) => (values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0);
+
+/** Calibration of a stored question; questions stored before calibration existed are calibrated on read. */
+export function calibrationOf(instance: QuestionInstance) {
+  return (
+    instance.calibration ??
+    calibrate({
+      level: instance.difficulty,
+      stem: instance.stem,
+      exhibits: instance.exhibits,
+      features: instance.features,
+      presentation: instance.presentation,
+      answerType: answerTypeOfInstance(instance),
+      chain: instance.chain,
+      concept: instance.kind === "choice" ? instance.concept : undefined,
+    })
+  );
+}
+
+function formatSummary(ordered: AttemptRecord[], evidence: AttemptEvidence[]): DiagnosticReport["formats"] {
+  const rows = ordered.map((a, idx) => ({ a, e: evidence[idx] }));
+  const group = <K extends string | number>(key: (a: AttemptRecord) => K) => {
+    const map = new Map<K, typeof rows>();
+    rows.forEach((r) => map.set(key(r.a), [...(map.get(key(r.a)) ?? []), r]));
+    return map;
+  };
+  const stats = (list: typeof rows) => ({ total: list.length, correct: list.filter((r) => r.e.correct).length, averageSeconds: avg(list.map((r) => r.a.timeSpentSeconds)) });
+  const numeric = rows.filter((r) => isNumericAnswer(answerTypeOfInstance(r.a.instance)));
+  const typed = rows.filter((r) => !isNumericAnswer(answerTypeOfInstance(r.a.instance)));
+  const concepts = rows.filter((r) => conceptItem(r.a.instance));
+  const byFormat = group((a) => itemFormatOf(a.instance));
+  const byType = group((a) => answerTypeOfInstance(a.instance));
+  const byTime = group((a) => `${itemFormatOf(a.instance)}|${a.instance.difficulty}`);
+  const byDepth = group((a): string => {
+    const steps = calibrationOf(a.instance).reasoningSteps;
+    return steps <= 2 ? "1–2 steps" : steps <= 4 ? "3–4 steps" : "5 or more steps";
+  });
+  return {
+    split: [
+      { kind: "numerical" as const, label: "Numerical calculation", ...stats(numeric) },
+      { kind: "non-numerical" as const, label: "Conceptual, symbolic, statement or composite", ...stats(typed) },
+    ].filter((r) => r.total > 0),
+    practice: [
+      { kind: "calculation" as const, label: "Calculation items", total: rows.length - concepts.length, correct: rows.filter((r) => !conceptItem(r.a.instance) && r.e.correct).length },
+      { kind: "concept" as const, label: "Concept items", total: concepts.length, correct: concepts.filter((r) => r.e.correct).length },
+    ].filter((r) => r.total > 0),
+    byFormat: [...byFormat.entries()].map(([format, list]) => ({ format, label: ITEM_FORMAT_LABELS[format], ...stats(list) })).sort((a, b) => b.total - a.total),
+    byAnswerType: [...byType.entries()].map(([type, list]) => ({ type, label: ANSWER_TYPE_LABELS[type], total: list.length, correct: list.filter((r) => r.e.correct).length })),
+    time: [...byTime.entries()]
+      .map(([key, list]) => {
+        const [format, level] = key.split("|");
+        return { format: format as ItemFormat, label: ITEM_FORMAT_LABELS[format as ItemFormat], level: Number(level) as Difficulty, total: list.length, averageSeconds: stats(list).averageSeconds };
+      })
+      .sort((a, b) => a.level - b.level || b.total - a.total),
+    depth: ["1–2 steps", "3–4 steps", "5 or more steps"].filter((k) => byDepth.has(k)).map((steps) => ({ steps, ...stats(byDepth.get(steps)!) })),
+  };
+}
+
+function conceptSummary(ordered: AttemptRecord[], evidence: AttemptEvidence[], positionOf: (idx: number) => number): DiagnosticReport["concepts"] {
+  const failures = new Map<ConceptFailure, number[]>();
+  const missed = new Map<string, number[]>();
+  const confused = new Map<string, number[]>();
+  let total = 0;
+  let correct = 0;
+  ordered.forEach((a, idx) => {
+    if (!conceptItem(a.instance) || a.instance.kind !== "choice") return;
+    total += 1;
+    const e = evidence[idx];
+    if (e.correct) correct += 1;
+    if (!e.answered || e.correct) return;
+    const p = positionOf(idx);
+    if (e.conceptFailure) failures.set(e.conceptFailure, [...(failures.get(e.conceptFailure) ?? []), p]);
+    const chain = a.instance.concept;
+    const at = chain && e.conceptStage !== null ? chain.steps[e.conceptStage]?.concept : chain?.concepts[0];
+    if (at) missed.set(at, [...(missed.get(at) ?? []), p]);
+    if (at && e.confusedWith && at !== e.confusedWith) {
+      const key = [at, e.confusedWith].sort().join("|");
+      confused.set(key, [...(confused.get(key) ?? []), p]);
+    }
+  });
+  return {
+    total,
+    correct,
+    byFailure: CONCEPT_FAILURES.filter((k) => failures.has(k)).map((kind) => ({ kind, label: CONCEPT_FAILURE_LABELS[kind], count: failures.get(kind)!.length, positions: failures.get(kind)! })),
+    missed: [...missed.entries()].map(([id, positions]) => ({ id, label: getConcept(id)?.label ?? id, positions })).sort((a, b) => b.positions.length - a.positions.length),
+    confused: [...confused.entries()].map(([key, positions]) => {
+      const [a, b] = key.split("|");
+      return { a, aLabel: getConcept(a)?.label ?? a, b, bLabel: getConcept(b)?.label ?? b, positions };
+    }),
   };
 }

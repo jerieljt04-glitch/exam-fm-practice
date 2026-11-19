@@ -6,7 +6,24 @@ import { useRouter } from "next/navigation";
 import { Button, Modal } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-type Mode = "DIAGNOSTIC" | "EXAM" | "CHALLENGE" | "PRACTICE";
+type Mode = "DIAGNOSTIC" | "EXAM" | "CHALLENGE" | "PRACTICE" | "CONCEPT";
+
+const FOCI = [
+  { id: "mixed", label: "Mixed concepts" },
+  { id: "definitions", label: "Definitions and interpretation" },
+  { id: "equations", label: "Equations and notation" },
+  { id: "statements", label: "Statement analysis" },
+  { id: "errors", label: "Error diagnosis" },
+] as const;
+
+const TOPIC_OPTIONS = [
+  { id: "", label: "All topics" },
+  { id: "TVM", label: "Time value of money" },
+  { id: "ANNUITIES", label: "Annuities" },
+  { id: "LOANS", label: "Loans" },
+  { id: "BONDS", label: "Bonds" },
+  { id: "ALM", label: "Cash flows, portfolios and ALM" },
+] as const;
 
 const BUCKETS = [
   { id: "single", label: "Single formula" },
@@ -48,6 +65,10 @@ export function StartPanel({ llm }: { llm: boolean }) {
   const [pCount, setPCount] = useState(10);
   const [pRef, setPRef] = useState<"integration" | "supported">("integration");
   const [mix, setMix] = useState<Record<string, number>>({ single: 20, pair: 40, multi: 30, reconstruct: 10 });
+  const [kCount, setKCount] = useState(10);
+  const [kLevel, setKLevel] = useState("mixed");
+  const [kFocus, setKFocus] = useState<string>("mixed");
+  const [kTopic, setKTopic] = useState<string>("");
   const mixTotal = Object.values(mix).reduce((a, b) => a + b, 0);
 
   const go = (mode: Mode, body: Record<string, unknown>) => void start(mode, "/api/sessions", { mode, aiWording: ai, ...body });
@@ -89,7 +110,7 @@ export function StartPanel({ llm }: { llm: boolean }) {
           <div className="eyebrow">Mode B</div>
           <h3 className="text-lg font-semibold">Exam simulation</h3>
           <p className="mt-1 flex-1 text-sm text-muted-foreground">
-            30 questions, 150 minutes, five options, weighted 3 / 7 / 6 / 6 / 8 across the syllabus. No feedback until you submit.
+            30 questions, 150 minutes, five options, weighted 3 / 7 / 6 / 6 / 8 across the syllabus, with about a quarter of the items conceptual, symbolic, statement-based or multi-valued. No feedback until you submit.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <label className="flex items-center gap-1">
@@ -110,7 +131,7 @@ export function StartPanel({ llm }: { llm: boolean }) {
           <div className="eyebrow">Above exam level</div>
           <h3 className="text-lg font-semibold">Challenge</h3>
           <p className="mt-1 flex-1 text-sm text-muted-foreground">
-            Harder-than-exam reasoning inside the syllabus: hidden structure, chained concepts, equations built from scratch. Scored separately.
+            Harder-than-exam reasoning inside the syllabus: hidden structure, chained concepts, equations built from scratch. Every question is Challenge level — never padded with easier ones. Scored separately.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <label className="flex items-center gap-1">
@@ -130,62 +151,115 @@ export function StartPanel({ llm }: { llm: boolean }) {
           </Button>
         </div>
       </div>
-      <div className="panel p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-xl">
-            <div className="eyebrow">Formula integration</div>
+      <section className="panel p-4" aria-labelledby="practice-heading">
+        <h2 id="practice-heading" className="eyebrow">Formula and concept practice</h2>
+        <div className="mt-3 grid gap-4 lg:grid-cols-2">
+          <div className="flex flex-col rounded-lg border p-4">
             <h3 className="text-lg font-semibold">Formula practice</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Questions chosen by how many formulas they connect, from a single formula up to problems that must be rebuilt from first principles. After submitting, each question shows its formula chain and the step where any mistake happened. Diagnostics, exams and challenges are always closed-book.
+            <p className="mt-1 text-sm text-muted-foreground">Practice retrieving, connecting, rearranging and deriving formulas.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Questions are chosen by how many formulas they connect. After submitting, each question shows its formula chain and the step where any mistake happened.
             </p>
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1">
+                  Questions
+                  <select className={select} value={pCount} onChange={(e) => setPCount(Number(e.target.value))}>
+                    {[5, 10, 15, 20].map((n) => (
+                      <option key={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-1">
+                  Reference
+                  <select className={cn(select, "max-w-[16rem]")} value={pRef} onChange={(e) => setPRef(e.target.value as typeof pRef)}>
+                    <option value="integration">Hidden — chain revealed after submitting</option>
+                    <option value="supported">Formula library open while working</option>
+                  </select>
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4">
+                {BUCKETS.map((b) => (
+                  <label key={b.id} className="flex flex-col text-xs text-muted-foreground">
+                    {b.label}
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={mix[b.id]}
+                        onChange={(e) => setMix((m) => ({ ...m, [b.id]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))}
+                        className="h-8 w-16 rounded-md border bg-card px-2 text-sm text-foreground"
+                        aria-label={`${b.label} percentage`}
+                      />
+                      %
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className={cn("text-xs", mixTotal === 100 ? "text-muted-foreground" : "text-warning")}>
+                {mixTotal === 100 ? "Default mix 20 / 40 / 30 / 10." : `Shares add to ${mixTotal}%; they will be scaled to 100%.`}
+              </p>
+            </div>
+            <Button className="mt-auto self-start" onClick={() => go("PRACTICE", { count: pCount, reference: pRef, integrationMix: mix })} disabled={busy !== null || mixTotal === 0}>
+              {busy === "PRACTICE" ? "Generating and validating…" : "Start formula practice"}
+            </Button>
           </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1">
+
+          <div className="flex flex-col rounded-lg border p-4">
+            <h3 className="text-lg font-semibold">Concept practice</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Test whether you understand what the formulas mean, when they apply, and how financial quantities relate.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Definitions, equation selection, statements I / II / III, comparative statics and error diagnosis. Closed book; scored into concept mastery, separately from formula mastery.
+            </p>
+            <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+              <label className="flex items-center justify-between gap-2">
                 Questions
-                <select className={select} value={pCount} onChange={(e) => setPCount(Number(e.target.value))}>
+                <select className={select} value={kCount} onChange={(e) => setKCount(Number(e.target.value))}>
                   {[5, 10, 15, 20].map((n) => (
                     <option key={n}>{n}</option>
                   ))}
                 </select>
               </label>
-              <label className="flex items-center gap-1">
-                Reference
-                <select className={select} value={pRef} onChange={(e) => setPRef(e.target.value as typeof pRef)}>
-                  <option value="integration">Hidden — chain revealed after submitting</option>
-                  <option value="supported">Formula library open while working</option>
+              <label className="flex items-center justify-between gap-2">
+                Difficulty
+                <select className={select} value={kLevel} onChange={(e) => setKLevel(e.target.value)}>
+                  <option value="mixed">Mixed</option>
+                  <option value="1">SOA standard</option>
+                  <option value="2">Advanced</option>
+                  <option value="3">Challenge</option>
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-2">
+                Focus
+                <select className={cn(select, "max-w-[13rem]")} value={kFocus} onChange={(e) => setKFocus(e.target.value)}>
+                  {FOCI.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-2">
+                Topic
+                <select className={cn(select, "max-w-[13rem]")} value={kTopic} onChange={(e) => setKTopic(e.target.value)}>
+                  {TOPIC_OPTIONS.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4">
-              {BUCKETS.map((b) => (
-                <label key={b.id} className="flex flex-col text-xs text-muted-foreground">
-                  {b.label}
-                  <span className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={5}
-                      value={mix[b.id]}
-                      onChange={(e) => setMix((m) => ({ ...m, [b.id]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))}
-                      className="h-8 w-16 rounded-md border bg-card px-2 text-sm text-foreground"
-                      aria-label={`${b.label} percentage`}
-                    />
-                    %
-                  </span>
-                </label>
-              ))}
-            </div>
-            <p className={cn("text-xs", mixTotal === 100 ? "text-muted-foreground" : "text-warning")}>
-              {mixTotal === 100 ? "Default mix 20 / 40 / 30 / 10." : `Shares add to ${mixTotal}%; they will be scaled to 100%.`}
-            </p>
-            <Button onClick={() => go("PRACTICE", { count: pCount, reference: pRef, integrationMix: mix })} disabled={busy !== null || mixTotal === 0}>
-              {busy === "PRACTICE" ? "Generating and validating…" : "Start formula practice"}
+            <Button className="mt-3 self-start" onClick={() => go("CONCEPT", { count: kCount, difficulty: kLevel, focus: kFocus, topic: kTopic || null })} disabled={busy !== null}>
+              {busy === "CONCEPT" ? "Generating and validating…" : "Start concept practice"}
             </Button>
           </div>
         </div>
-      </div>
+      </section>
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         {llm ? (
           <label className="flex items-center gap-1.5">

@@ -1,6 +1,7 @@
 import katex from "katex";
 
 import { tokenizeMath } from "../math/markup";
+import { exhibitMarkup } from "./answers";
 import { evaluate, isEquation, rootNear, solveEquation } from "./expr";
 import { displayedValue, formatAnswer } from "./format";
 import { getFormula } from "../formulas/registry";
@@ -245,6 +246,7 @@ export function validateDraft(
   }
   const markup = [
     draft.stem,
+    ...(draft.exhibits ?? []).flatMap(exhibitMarkup),
     draft.answer.derivation,
     ...explanationMarkup(draft.explanation),
     ...chosen.flatMap((c) => [c.derivation, c.feedback, c.method]),

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 
-import type { SessionMode } from "@/lib/engine/session";
+import type { ConceptFocus, SessionMode } from "@/lib/engine/session";
 import { createSession } from "@/lib/server/repository";
+import { TOPIC_ORDER, type TopicId } from "@/lib/syllabus";
 
 export const dynamic = "force-dynamic";
 
-const MODES: SessionMode[] = ["DIAGNOSTIC", "EXAM", "CHALLENGE", "PRACTICE"];
+const MODES: SessionMode[] = ["DIAGNOSTIC", "EXAM", "CHALLENGE", "PRACTICE", "CONCEPT"];
+const FOCI: ConceptFocus[] = ["mixed", "definitions", "equations", "statements", "errors"];
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -20,6 +22,8 @@ export async function POST(request: Request) {
       aiWording: Boolean(body.aiWording),
       reference: body.reference === "supported" || body.reference === "integration" ? body.reference : undefined,
       integrationMix: typeof body.integrationMix === "object" && body.integrationMix ? (body.integrationMix as never) : undefined,
+      conceptFocus: FOCI.includes(body.focus as ConceptFocus) ? (body.focus as ConceptFocus) : undefined,
+      topic: TOPIC_ORDER.includes(body.topic as TopicId) ? (body.topic as TopicId) : null,
     });
     return NextResponse.json({ id });
   } catch (error) {

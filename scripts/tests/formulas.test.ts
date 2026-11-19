@@ -7,7 +7,7 @@ import { buildQuestion } from "../../lib/engine/assemble";
 import { Da, Ia, Is, acc, adue, an, balanceProsp, balanceRetro, bondPrice, convexity, effToNom, effToNomDisc, geometricPV, macaulayConvexity, macaulayDuration, pvFlows, sdue, sn, v } from "../../lib/engine/finance";
 import { BUCKET_LEVELS, DEFAULT_INTEGRATION_MIX, bucketCounts, buildSession, integrationLevelsOf, type IntegrationBucket } from "../../lib/engine/session";
 import { TEMPLATES, TEMPLATE_BY_ID } from "../../lib/engine/templates";
-import { integrationLevel, toPublicQuestion, type IntegrationLevel, type QuestionInstance } from "../../lib/engine/types";
+import { integrationLevel, toPublicQuestion, type IntegrationLevel, type NumericInstance, type QuestionInstance } from "../../lib/engine/types";
 import { NAMED_CHAINS, foundations } from "../../lib/formulas/graph";
 import { FORMULAS, FORMULA_BY_ID } from "../../lib/formulas/registry";
 import { OUTCOMES } from "../../lib/syllabus";
@@ -196,7 +196,7 @@ test("integration mix: largest-remainder counts and practice sessions that follo
     expect(new Set(questions.map((q) => q.templateId)).size === count, `${seed}: repeated template`);
     const expected = bucketCounts(count, DEFAULT_INTEGRATION_MIX);
     for (const bucket of Object.keys(expected) as IntegrationBucket[]) {
-      const got = questions.filter((q) => BUCKET_LEVELS[bucket].includes(q.integration)).length;
+      const got = questions.filter((q) => BUCKET_LEVELS[bucket].includes(q.integration!)).length;
       expect(got === expected[bucket], `${seed}: ${bucket} has ${got}, expected ${expected[bucket]}`);
     }
     expect(new Set(questions.map((q) => q.topic)).size >= 4, `${seed}: practice set should span topics`);
@@ -268,7 +268,7 @@ test("formula mastery: earlier steps pass, the failing step fails, later steps a
 
 test("formula mastery: reproduction alone is not mastery", () => {
   const base = buildQuestion(TEMPLATE_BY_ID["int-payoff-between"], 2, "repro").instance!;
-  const single = (n: number): QuestionInstance => ({
+  const single = (n: number): NumericInstance => ({
     ...base,
     instanceId: `single-${n}`,
     templateId: `single-template-${n}`,

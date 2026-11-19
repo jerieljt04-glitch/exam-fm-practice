@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { Exhibits } from "@/components/answers/Exhibits";
+import { OptionContentView, statementCountOf } from "@/components/answers/OptionContentView";
 import { FormulaLibrary } from "@/components/formulas/FormulaLibrary";
 import { MathRenderer } from "@/components/MathRenderer";
 import { Badge, Button, Modal } from "@/components/ui";
@@ -163,6 +165,7 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
         <div className="flex items-center gap-3">
           <Badge tone="info">{initial.modeLabel}</Badge>
           {initial.reference !== "closed" && <Badge>{REFERENCE_LABELS[initial.reference]}</Badge>}
+          {initial.focusLabel && <Badge>{initial.focusLabel}</Badge>}
           <span className="text-sm font-semibold">
             Question {index + 1} of {questions.length}
           </span>
@@ -188,6 +191,11 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
           </Button>
         </div>
       </div>
+      {initial.notice && (
+        <p role="status" className="mb-3 rounded-md border border-warning bg-warning/10 px-3 py-2 text-sm">
+          {initial.notice}
+        </p>
+      )}
       <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-secondary" role="progressbar" aria-valuenow={answered} aria-valuemax={questions.length}>
         <div className="h-full bg-primary transition-all" style={{ width: `${(100 * answered) / questions.length}%` }} />
       </div>
@@ -195,15 +203,18 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <section className="panel p-5">
           <MathRenderer key={current.instanceId} content={current.stem} className="text-[15px]" />
+          <Exhibits key={`exhibits-${current.instanceId}`} exhibits={current.exhibits} className="mt-4" />
           <fieldset className="mt-5 space-y-2">
             <legend className="sr-only">Answer choices</legend>
             {current.options.map((option) => {
               const selected = current.response.selectedKey === option.key;
+              const rich = option.content !== undefined && option.content.type !== "numeric";
               return (
                 <label
                   key={option.key}
                   className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 transition-colors",
+                    "flex min-w-0 cursor-pointer gap-3 rounded-md border px-3 py-2.5 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ring-offset-background",
+                    rich ? "items-start" : "items-center",
                     selected ? "border-primary bg-primary/10" : "hover:bg-accent"
                   )}
                 >
@@ -212,12 +223,16 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
                     name={`answer-${current.instanceId}`}
                     className="sr-only"
                     checked={selected}
+                    aria-label={`Option ${option.key}: ${option.display}`}
                     onChange={() => update({ selectedKey: option.key })}
                   />
-                  <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold", selected && "border-primary bg-primary text-primary-foreground")}>
+                  <span
+                    aria-hidden
+                    className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold", selected && "border-primary bg-primary text-primary-foreground")}
+                  >
                     {option.key}
                   </span>
-                  <span className="font-mono text-[15px] tabular-nums">{option.display}</span>
+                  <OptionContentView content={option.content} display={option.display} statementCount={statementCountOf(current.exhibits)} className={cn("flex-1", rich && "pt-0.5")} />
                 </label>
               );
             })}

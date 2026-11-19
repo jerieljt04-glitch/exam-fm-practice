@@ -16,7 +16,10 @@
     "test": "npm run test:unit && npm run test:sympy",
     "test:unit": "TS_NODE_PROJECT=tsconfig.scripts.json ts-node --transpile-only scripts/tests/run.ts",
     "test:sympy": "TS_NODE_PROJECT=tsconfig.scripts.json ts-node --transpile-only scripts/export-bank.ts && python3 scripts/validate_sympy.py",
-    "validate:bank": "TS_NODE_PROJECT=tsconfig.scripts.json ts-node --transpile-only scripts/probe.ts"
+    "validate:bank": "TS_NODE_PROJECT=tsconfig.scripts.json ts-node --transpile-only scripts/probe.ts",
+    "validate:choice": "TS_NODE_PROJECT=tsconfig.scripts.json ts-node --transpile-only scripts/probe-choice.ts",
+    "report:calibration": "TS_NODE_PROJECT=tsconfig.scripts.json ts-node --transpile-only scripts/calibration-report.ts",
+    "test:migration": "TS_NODE_PROJECT=tsconfig.scripts.json ts-node --transpile-only scripts/test-migration.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

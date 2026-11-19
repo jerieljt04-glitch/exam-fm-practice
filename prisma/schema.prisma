@@ -11,7 +11,7 @@ generator client {
 
 model Session {
   id              String            @id
-  mode            String // DIAGNOSTIC | EXAM | CHALLENGE | REMEDIATION | TRANSFER
+  mode            String // DIAGNOSTIC | EXAM | CHALLENGE | PRACTICE | CONCEPT | REMEDIATION | TRANSFER
   status          String // ACTIVE | SUBMITTED
   difficulty      String // "1" | "2" | "3" | "mixed"
   timed           Boolean
@@ -35,6 +35,12 @@ model SessionQuestion {
   topic                 String
   difficulty            Int
   payload               String // JSON QuestionInstance, including its validation record
+  /// numeric | text | math | statements | composite | table. Rows stored before the rich answer model are numeric.
+  answerType            String    @default("numeric")
+  /// Structural item format (direct-calculation, equation-selection, statement-combination, …).
+  itemFormat            String    @default("direct-calculation")
+  /// calculation | concept — concept items feed concept mastery, not formula mastery.
+  practice              String    @default("calculation")
   selectedKey           String?
   confidence            String?
   method                String?
@@ -48,6 +54,7 @@ model SessionQuestion {
 
   @@index([sessionId])
   @@index([templateId])
+  @@index([practice])
 }
 
 /// Every validation attempt, including rejected drafts that never reached a session.
@@ -68,7 +75,7 @@ model ValidationLog {
 model RemediationItem {
   id               String   @id @default(uuid())
   target           String // misconception id, or objective id for weak-reasoning items
-  kind             String // MISCONCEPTION | WEAK_REASONING
+  kind             String // MISCONCEPTION | WEAK_REASONING | CONCEPT
   objective        String
   sourceQuestionId String
   sourceTemplateId String
@@ -80,4 +87,38 @@ model RemediationItem {
   updatedAt        DateTime @updatedAt
 
   @@index([status])
+}
+
+/// Study area: one spaced-repetition card (formula or concept flashcard) and its schedule.
+/// Rows are created on the first review; a card with no row is new.
+model StudyCard {
+  id             String    @id // e.g. "f:B.annuity-immediate:recall", "c:tvm.force-of-interest"
+  deck           String // formulas | concepts
+  ease           Float     @default(2.5)
+  intervalDays   Float     @default(0)
+  reps           Int       @default(0)
+  lapses         Int       @default(0)
+  dueAt          DateTime  @default(now())
+  lastRating     String? // again | hard | good | easy
+  lastReviewedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([deck])
+  @@index([dueAt])
+}
+
+/// Study area: every answer given in a study tool (flashcard rating, quick check, formula drill,
+/// concept question with instant feedback). Kept apart from exam-style sessions and their mastery.
+model StudyAttempt {
+  id      String   @id @default(uuid())
+  kind    String // FLASHCARD | QUICK_CHECK | DRILL | CONCEPT_QUESTION
+  itemId  String // card id, quick-check id, drill id or concept template id
+  topic   String
+  correct Boolean
+  detail  String? // rating, chosen option, …
+  at      DateTime @default(now())
+
+  @@index([kind])
+  @@index([itemId])
 }

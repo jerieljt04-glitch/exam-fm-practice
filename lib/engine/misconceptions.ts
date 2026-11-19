@@ -1,51 +1,24 @@
-import type { ReasoningSkill } from "./skills";
+import { ALM_CONCEPT_MISCONCEPTIONS } from "./misconceptions-extra/alm";
+import { ANNUITY_CONCEPT_MISCONCEPTIONS } from "./misconceptions-extra/annuities";
+import { BOND_CONCEPT_MISCONCEPTIONS } from "./misconceptions-extra/bonds";
+import { CHALLENGE_MISCONCEPTIONS } from "./misconceptions-extra/challenge";
+import { COMPOSITE_MISCONCEPTIONS } from "./misconceptions-extra/composite";
+import { LOAN_CONCEPT_MISCONCEPTIONS } from "./misconceptions-extra/loans";
+import { SHARED_CONCEPT_MISCONCEPTIONS } from "./misconceptions-extra/shared";
+import { TVM_CONCEPT_MISCONCEPTIONS } from "./misconceptions-extra/tvm";
+import { entry, type Misconception } from "./misconception-kit";
+
+export { MISCONCEPTION_CATEGORIES, entry, type Misconception, type MisconceptionCategory } from "./misconception-kit";
 
 /**
  * Catalogue of the mistakes distractors are built from.
  *
- * Every wrong option names one of these. The category is one of the eleven
- * required misconception categories; the specific id is what remediation
- * targets, so a question built on one template can be followed by a question
- * from a different template that sets the same trap.
+ * The core entries below come from the numerical bank. Conceptual
+ * misunderstandings used by Concept Practice and the non-numerical SOA-style
+ * items live in misconceptions-extra/, one file per syllabus topic, and are
+ * merged in here; every id must be unique across all files (checked on load).
  */
-
-export const MISCONCEPTION_CATEGORIES = {
-  INCORRECT_FORMULA: "Incorrect formula",
-  INCORRECT_MODEL: "Incorrect financial model",
-  TIMING: "Cash-flow timing",
-  VARIABLE_INTERPRETATION: "Incorrect variable interpretation",
-  ALLOCATION: "Incorrect allocation",
-  TRANSLATION: "Incorrect mathematical translation",
-  ALGEBRA: "Algebraic mistake",
-  ARITHMETIC: "Arithmetic mistake",
-  SEQUENCE_SERIES: "Sequence or series mistake",
-  RATE_CONVERSION: "Unit or rate-conversion mistake",
-  CONCEPTUAL: "Conceptual misconception",
-} as const;
-
-export type MisconceptionCategory = keyof typeof MISCONCEPTION_CATEGORIES;
-
-export interface Misconception {
-  category: MisconceptionCategory;
-  label: string;
-  description: string;
-  skills: ReasoningSkill[];
-  /** How to spot this trap in a future question. */
-  recognition: string;
-  /** The correct relationship, stated generally. */
-  principle: string;
-}
-
-const entry = (
-  category: MisconceptionCategory,
-  label: string,
-  description: string,
-  skills: ReasoningSkill[],
-  recognition: string,
-  principle: string
-): Misconception => ({ category, label, description, skills, recognition, principle });
-
-export const MISCONCEPTIONS = {
+const CORE_MISCONCEPTIONS = {
   // ------------------------------------------------------------ timing
   TIMING_DUE_AS_IMMEDIATE: entry(
     "TIMING",
@@ -581,7 +554,32 @@ export const MISCONCEPTIONS = {
   ),
 } as const satisfies Record<string, Misconception>;
 
+export const MISCONCEPTIONS = {
+  ...CORE_MISCONCEPTIONS,
+  ...SHARED_CONCEPT_MISCONCEPTIONS,
+  ...TVM_CONCEPT_MISCONCEPTIONS,
+  ...ANNUITY_CONCEPT_MISCONCEPTIONS,
+  ...LOAN_CONCEPT_MISCONCEPTIONS,
+  ...BOND_CONCEPT_MISCONCEPTIONS,
+  ...ALM_CONCEPT_MISCONCEPTIONS,
+  ...COMPOSITE_MISCONCEPTIONS,
+  ...CHALLENGE_MISCONCEPTIONS,
+} as const satisfies Record<string, Misconception>;
+
 export type MisconceptionId = keyof typeof MISCONCEPTIONS;
+
+function assertUniqueIds(): void {
+  const groups = [CORE_MISCONCEPTIONS, SHARED_CONCEPT_MISCONCEPTIONS, TVM_CONCEPT_MISCONCEPTIONS, ANNUITY_CONCEPT_MISCONCEPTIONS, LOAN_CONCEPT_MISCONCEPTIONS, BOND_CONCEPT_MISCONCEPTIONS, ALM_CONCEPT_MISCONCEPTIONS, COMPOSITE_MISCONCEPTIONS, CHALLENGE_MISCONCEPTIONS];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const id of Object.keys(group)) {
+      if (seen.has(id)) throw new Error(`Misconception id ${id} is defined twice.`);
+      seen.add(id);
+    }
+  }
+}
+
+assertUniqueIds();
 
 export function getMisconception(id: string): Misconception | undefined {
   return (MISCONCEPTIONS as Record<string, Misconception>)[id];
