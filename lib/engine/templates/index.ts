@@ -7,6 +7,9 @@ import { ALM_TEMPLATES } from "./alm";
 import { APPROACH_ALM_TEMPLATES } from "./approach-alm";
 import { APPROACH_LOAN_BOND_TEMPLATES } from "./approach-loans-bonds";
 import { APPROACH_TVM_ANNUITY_TEMPLATES } from "./approach-tvm-annuities";
+import { MIXED_PV_TEMPLATES } from "./approach-mixed";
+import { CURVE_INFLATION_TEMPLATES } from "./approach-curve-inflation";
+import { AMORTIZATION_TEMPLATES } from "./approach-amortization";
 import { ANNUITY_TEMPLATES } from "./annuities";
 import { BOND_TEMPLATES } from "./bonds";
 import { CHALLENGE_TEMPLATES } from "./challenge";
@@ -29,6 +32,12 @@ export const TEMPLATES: QuestionTemplate[] = [
   ...APPROACH_TVM_ANNUITY_TEMPLATES,
   ...APPROACH_LOAN_BOND_TEMPLATES,
   ...APPROACH_ALM_TEMPLATES,
+  // Mixed present values: annuities, perpetuities, rate regimes, forward curves.
+  ...MIXED_PV_TEMPLATES,
+  // Spot-rate and inflation families.
+  ...CURVE_INFLATION_TEMPLATES,
+  // Bond amortization families.
+  ...AMORTIZATION_TEMPLATES,
 ];
 
 /** Typed-option templates: Concept Practice items and composite calculation items. */

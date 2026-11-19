@@ -73,6 +73,7 @@ const SECONDS_PER_QUESTION = (EXAM_STRUCTURE.durationMinutes * 60) / EXAM_STRUCT
 
 function parseDifficulty(value: unknown, fallback: DifficultySetting): DifficultySetting {
   if (value === "mixed") return "mixed";
+  if (value === "hard") return "hard";
   const n = Number(value);
   return n === 1 || n === 2 || n === 3 ? (n as 1 | 2 | 3) : fallback;
 }
@@ -112,8 +113,9 @@ export async function createSession(input: CreateSessionInput): Promise<string> 
       recent.add(a.instance.templateId);
       if (a.instance.kind === "choice") recent.add(`${a.instance.templateId}|${a.instance.variant}`);
     });
-  // Solution approaches and templates from the last six sessions, weighted by recency.
-  const recency = recencyMaps(history);
+  // Solution approaches and templates from the last six sessions served — submitted or not, so an
+  // abandoned attempt still counts as seen — weighted by recency.
+  const recency = recencyMaps(await recentlyServed(6));
   const conceptFocus: ConceptFocus | undefined = input.mode === "CONCEPT" ? (input.conceptFocus && input.conceptFocus in CONCEPT_FOCUS_LABELS ? input.conceptFocus : "mixed") : undefined;
   const topic = input.mode === "CONCEPT" && input.topic && TOPIC_ORDER.includes(input.topic) ? input.topic : null;
 
@@ -433,6 +435,16 @@ export async function attemptsForSession(id: string): Promise<AttemptRecord[]> {
     orderBy: { position: "asc" },
   });
   return rows.map(toAttempt);
+}
+
+/** Questions of the most recently created sessions (any status), oldest session first. */
+export async function recentlyServed(sessions: number): Promise<Array<{ sessionId: string; instance: QuestionInstance }>> {
+  const rows = await prisma.session.findMany({
+    orderBy: { createdAt: "desc" },
+    take: sessions,
+    select: { id: true, questions: { select: { payload: true }, orderBy: { position: "asc" } } },
+  });
+  return rows.reverse().flatMap((row) => row.questions.map((q) => ({ sessionId: row.id, instance: JSON.parse(q.payload) as QuestionInstance })));
 }
 
 export async function attemptHistory(): Promise<AttemptRecord[]> {

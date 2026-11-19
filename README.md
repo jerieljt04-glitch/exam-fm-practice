@@ -198,6 +198,37 @@ prevent it:
   duration; a duration updated by PV-weighting; and the IRR used as an input to recover unknown
   cash flows.
 
+**Multi-route families** (`lib/engine/templates/approach-{mixed,curve-inflation,amortization}.ts`):
+11 more families, each drawing one of several twists per level so one family can serve several
+different routes, with Challenge versions of 4–6 steps:
+
+- *Mixed present values* — an annuity followed by a (growing) perpetuity under a rate that changes
+  mid-stream (before, at or after the switch in payments); a perpetuity bought at one yield and sold
+  at another (value received, required sale price, buyer's yield, holding-period yield, including
+  arithmetically increasing perpetuities); monthly payments followed by an annual perpetuity with
+  deferral, rate changes and growth; a forward-rate or spot-rate curve with a flat perpetual tail.
+- *Spot rates* — bootstrapping spot and forward rates from coupon-bond prices, par yields and yields
+  of other bonds from the bootstrapped curve; zero-coupon prices hidden in a ladder of annuity
+  prices (spot, forward, bond price, yield, and the increasing annuity `4A₄ − A₃ − A₂ − A₁`).
+- *Inflation* — indexed annuities and perpetuities (nominal growth vs real rate, payments stated in
+  today's money, indexation that starts late with the rate given in real terms); index-linked bonds
+  with indexed or fixed redemption; saving for a target in today's money with level deposits,
+  deposits that rise with inflation, and inflation that changes part-way.
+- *Bond amortization* — interest income over the life, in one coupon, over a window of coupons, or
+  used backwards to recover a book value; book values, the price and later book values worked from
+  a single write-down or write-up; the yield from two write-downs.
+
+These families value cash flows with a shared kit (`flows-kit.ts`) that handles level and geometric
+segments, payments every k periods and rate regimes. The answer uses closed forms; the
+independent check discounts payment by payment through the regimes.
+
+**Harder exams.** The exam simulation offers SOA standard, Mixed, Advanced, **Hard mix** (Advanced
+and Challenge only, three in five at Challenge) and **Challenge**; every setting builds the full
+30-question blueprint.
+
+**Abandoned attempts count.** The approach memory reads the last six sessions *served* — submitted
+or not — so starting and abandoning an exam does not make its routes reappear in the next one.
+
 The design follows SOA sample-question practice and item-writing research: difficulty should come
 from recognising structure and choosing a method (inverse problems, hidden relationships, two
 partial facts combined into a system, unstated quantities that are not needed), not from heavier
@@ -205,7 +236,7 @@ arithmetic or unclear wording, and wrong options come from real misconceptions.
 
 ## How questions are generated and validated
 
-The bank has 222 parameterised templates: 77 numerical templates — including the single-formula and
+The bank has 233 parameterised templates: 88 numerical templates — including the single-formula and
 formula-integration templates and 12 Challenge templates added so every learning outcome has Level-3
 coverage — 12 composite calculation templates (ordered pairs, portfolio allocations, table-driven and
 cash-flow-schedule items) and 133 Concept Practice templates covering all 42 learning outcomes at

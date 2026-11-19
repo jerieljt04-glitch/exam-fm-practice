@@ -24,7 +24,8 @@ export const BUCKET_LABELS: Record<IntegrationBucket, string> = {
   multi: "Three or more formulas",
   reconstruct: "Reconstruction, derivation or algebraic reasoning",
 };
-export type DifficultySetting = Difficulty | "mixed";
+/** A fixed level, "mixed" (mostly SOA standard) or "hard" (Advanced and Challenge only, weighted to Challenge). */
+export type DifficultySetting = Difficulty | "mixed" | "hard";
 
 /** Concept Practice focus filters. */
 export type ConceptFocus = "mixed" | "definitions" | "equations" | "statements" | "errors";
@@ -119,6 +120,8 @@ export interface BuiltSession {
 /** Mix of levels used when the difficulty is "mixed": mostly exam standard, with advanced and challenge items. */
 const MIXED_LEVELS: Difficulty[] = [1, 1, 1, 1, 1, 2, 2, 2, 3, 3];
 const MIXED_CONCEPT_LEVELS: Difficulty[] = [1, 1, 2, 2, 3];
+/** Mix of levels for the "hard" setting: no SOA-standard items, three in five at Challenge level. */
+const HARD_LEVELS: Difficulty[] = [2, 2, 3, 3, 3];
 
 /** Calculation items answer with one number; everything else counts toward the non-numerical share. */
 const isNumericTemplate = (t: AnyTemplate) => !isChoiceTemplate(t);
@@ -229,6 +232,7 @@ function proportional(total: number, weights: Record<TopicId, number>, order: To
 // ---------------------------------------------------------------- selection
 
 function levelFor(setting: DifficultySetting, rng: Rng, mixed: Difficulty[] = MIXED_LEVELS): Difficulty {
+  if (setting === "hard") return rng.choice(HARD_LEVELS);
   return setting === "mixed" ? rng.choice(mixed) : setting;
 }
 
@@ -370,7 +374,7 @@ export function buildSession(plan: SessionPlan): BuiltSession {
     if (!candidates.length && target.objective) {
       candidates = pool
         .filter((t) => (t.objective === target.objective || t.secondary.includes(target.objective!)) && eligible(t))
-        .map((template) => ({ template, level: closestLevel(template, plan.difficulty === "mixed" ? 2 : plan.difficulty) }));
+        .map((template) => ({ template, level: closestLevel(template, plan.difficulty === "mixed" ? 2 : plan.difficulty === "hard" ? 3 : plan.difficulty) }));
     }
     // A conceptual retest must differ in kind, not just in numbers: prefer another concept family and item format.
     const different = (t: AnyTemplate) =>
@@ -445,14 +449,14 @@ export function buildSession(plan: SessionPlan): BuiltSession {
       // Same topic first; then any topic; then — only when the bank has nothing new at this level — another
       // presentation (variant) of a template already used, never the same wording twice.
       if (fillConcept(slot, false, false) || fillConcept(slot, true, false) || fillConcept(slot, false, true) || fillConcept(slot, true, true)) continue;
-      shortfallReason = `The concept bank has too few distinct ${plan.difficulty === "mixed" ? "" : `level-${plan.difficulty} `}questions for this focus${plan.topic ? " and topic" : ""}.`;
+      shortfallReason = `The concept bank has too few distinct ${typeof plan.difficulty === "number" ? `level-${plan.difficulty} ` : ""}questions for this focus${plan.topic ? " and topic" : ""}.`;
     }
   }
 
   // ------------------------------------------------ fill the rest by topic weighting and style mix
   const remaining = plan.count - questions.length;
   if (remaining > 0 && plan.mode !== "CONCEPT") {
-    const strict = plan.difficulty !== "mixed";
+    const strict = typeof plan.difficulty === "number";
     const mix = plan.styleMix === undefined ? STYLE_MIX[plan.mode] ?? null : plan.styleMix;
     const order = rng.shuffle(TOPIC_ORDER);
     const counts = distributionFor(remaining, order);

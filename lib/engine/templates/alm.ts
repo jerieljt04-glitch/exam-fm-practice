@@ -498,11 +498,14 @@ const duration: QuestionTemplate = {
   reasoning: ["formula_retrieval", "concept_recognition", "arithmetic", "formula_selection"],
   soaConcept: "Macaulay duration of a set of cash flows or of a coupon bond.",
   generate(rng, lvl): QuestionDraft {
-    const i = gridRate(rng, 0.04, 0.09, 0.005);
+    const quoted = gridRate(rng, 0.04, 0.09, 0.005);
+    // Advanced: the yield is quoted nominally (convertible semiannually) and must be converted first.
+    const i = lvl === 1 ? quoted : Math.pow(1 + quoted / 2, 2) - 1;
     const fmt = YEARS;
     let flows: Flow[];
     let stem: string;
     let isBond = false;
+    let redeem = 1000;
     if (lvl === 1) {
       const times = rng.shuffle([1, 2, 3, 4, 5]).slice(0, 3).sort((a, b) => a - b);
       flows = times.map((t) => ({ t, amount: gridAmount(rng, 1000, 10000, 500) }));
@@ -511,8 +514,9 @@ const duration: QuestionTemplate = {
       isBond = true;
       const n = rng.int(4, 10);
       const r = gridRate(rng, 0.03, 0.1, 0.005);
-      flows = range(1, n).map((t) => ({ t, amount: 1000 * r + (t === n ? 1000 : 0) }));
-      stem = `A ${n}-year 1000 par bond pays annual coupons at a rate of ${pc(r)}. The annual effective yield is ${pc(i)}.\n\nCalculate the Macaulay duration of the bond.`;
+      redeem = rng.choice([1000, 1000, 1050, 1100]);
+      flows = range(1, n).map((t) => ({ t, amount: 1000 * r + (t === n ? redeem : 0) }));
+      stem = `A ${n}-year bond with face amount 1000 pays annual coupons at a rate of ${pc(r)} and is redeemable at ${redeem === 1000 ? "par" : amt(redeem)}. It is bought to yield ${pc(quoted)} convertible semiannually.\n\nCalculate the Macaulay duration of the bond, measured in years.`;
     }
     const D = macaulayDuration(flows, i);
     const total = flows.reduce((acc, f) => acc + f.amount, 0);
@@ -545,7 +549,7 @@ const duration: QuestionTemplate = {
       }),
     ];
     if (isBond) {
-      const coupons = flows.map((f) => ({ t: f.t, amount: f.amount - (f.t === last.t ? 1000 : 0) }));
+      const coupons = flows.map((f) => ({ t: f.t, amount: f.amount - (f.t === last.t ? redeem : 0) }));
       const couponD = macaulayDuration(coupons, i);
       distractors.push(
         distractor("CONC_IGNORED_REDEMPTION", couponD, durationExpr(coupons, i), {
@@ -557,6 +561,11 @@ const duration: QuestionTemplate = {
           derivation: `maturity $= ${shown(last.t, fmt)}$`,
           method: "Treated the bond as a zero-coupon bond.",
           feedback: "Only a zero-coupon bond has duration equal to its maturity; coupons pull the duration earlier.",
+        }),
+        distractor("RATE_NOMINAL_AS_EFFECTIVE", macaulayDuration(flows, quoted), durationExpr(flows, quoted), {
+          derivation: `at $i = ${dec(quoted, 4)}$: $${shown(macaulayDuration(flows, quoted), fmt)}$`,
+          method: "Discounted at the nominal yield as if it were annual effective.",
+          feedback: `Convert first: $i = (1 + ${dec(quoted / 2, 4)})^2 - 1 = ${dec(i, 6)}$.`,
         })
       );
     }
@@ -603,10 +612,11 @@ const duration: QuestionTemplate = {
       }),
       visuals: [{ kind: "duration", title: "Present values balance at the duration", flows, rate: i }],
       markers: [P, D * P],
-      presentation: ["direct"],
-      features: features({ steps: 2, formulaRetrieval: true }),
+      presentation: isBond ? ["frequency"] : ["direct"],
+      features: features({ steps: isBond ? 3 : 2, formulaRetrieval: true, multiConcept: isBond }),
       chain: chain(
         [
+          ...(isBond ? [step("A.nominal-equivalence", "Convert the semiannual nominal yield to an annual effective rate.", ["i", i, "annual effective yield"], ["i^(2)"])] : []),
           step("G.price-function", "Present value of every cash flow.", ["P", P, "price"], ["CF_t", "i"]),
           step("G.macaulay", "PV-weighted average time.", ["D", D, "Macaulay duration"], ["t", "PV_t", "P"]),
         ],

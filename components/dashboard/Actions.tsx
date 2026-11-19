@@ -119,6 +119,8 @@ export function StartPanel({ llm }: { llm: boolean }) {
                 <option value="1">SOA standard</option>
                 <option value="mixed">Mixed</option>
                 <option value="2">Advanced</option>
+                <option value="hard">Hard mix (Advanced + Challenge)</option>
+                <option value="3">Challenge</option>
               </select>
             </label>
           </div>
