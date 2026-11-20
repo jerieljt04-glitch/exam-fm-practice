@@ -321,22 +321,24 @@ export async function submitSession(id: string): Promise<void> {
   const now = new Date();
   // Idempotent: the status change is claimed atomically, so a repeated or concurrent submit
   // (timer expiry racing the button, a retried request) scores and applies remediation once.
-  const claimed = await prisma.$transaction(async (tx) => {
-    const claim = await tx.session.updateMany({ where: { id, status: "ACTIVE" }, data: { status: "SUBMITTED", submittedAt: now } });
-    if (claim.count === 0) return false;
-    for (const row of session.questions) {
-      const instance = JSON.parse(row.payload) as QuestionInstance;
-      const selected = instance.options.find((o) => o.key === row.selectedKey);
-      await tx.sessionQuestion.update({
-        where: { id: row.id },
-        data: {
-          isCorrect: Boolean(selected?.isCorrect),
-          selectedMisconception: selected && !selected.isCorrect ? selected.misconceptionTag : null,
-        },
-      });
-    }
-    return true;
+  // Score outside the transaction (parsing payloads is the slow part), then claim and write the
+  // scores in one short transaction: a concurrent submit waits briefly and then sees it claimed.
+  const scores = session.questions.map((row) => {
+    const instance = JSON.parse(row.payload) as QuestionInstance;
+    const selected = instance.options.find((o) => o.key === row.selectedKey);
+    return { id: row.id, isCorrect: Boolean(selected?.isCorrect), selectedMisconception: selected && !selected.isCorrect ? selected.misconceptionTag : null };
   });
+  const claimed = await prisma.$transaction(
+    async (tx) => {
+      const claim = await tx.session.updateMany({ where: { id, status: "ACTIVE" }, data: { status: "SUBMITTED", submittedAt: now } });
+      if (claim.count === 0) return false;
+      for (const score of scores) {
+        await tx.sessionQuestion.update({ where: { id: score.id }, data: { isCorrect: score.isCorrect, selectedMisconception: score.selectedMisconception } });
+      }
+      return true;
+    },
+    { maxWait: 20_000, timeout: 30_000 }
+  );
   if (!claimed) return;
 
   // Advance the remediation cycle with this session's evidence.
