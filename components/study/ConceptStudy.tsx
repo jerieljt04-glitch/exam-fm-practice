@@ -11,7 +11,7 @@ import { CONCEPT_FAMILY_LABELS, DIFFICULTY_LABELS, ITEM_FORMAT_LABELS, type Choi
 import { FORMULA_BY_ID } from "@/lib/formulas/registry";
 import { QUICK_CHECKS, QUICK_CHECK_BY_ID, type QuickCheck } from "@/lib/study/quick-checks";
 import { TOPIC_LABELS, TOPIC_ORDER, type TopicId } from "@/lib/syllabus";
-import { cn } from "@/lib/utils";
+import { cn, shuffle } from "@/lib/utils";
 
 type Tab = "checks" | "questions";
 
@@ -25,7 +25,6 @@ const CONCEPT_FOCUS_LABELS: Record<ConceptFocus, string> = {
   errors: "Error diagnosis",
 };
 
-const shuffle = <T,>(xs: T[]): T[] => [...xs].sort(() => Math.random() - 0.5);
 
 async function record(body: { kind: "QUICK_CHECK" | "CONCEPT_QUESTION"; itemId: string; topic: string; correct: boolean; detail?: string }) {
   await fetch("/api/study/attempt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => undefined);

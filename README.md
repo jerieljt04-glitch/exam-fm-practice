@@ -282,6 +282,37 @@ only rewrites the scenario text; a rewording is accepted only if every number an
 mathematical expression is unchanged, no method or topic is revealed, and it still typesets.
 Otherwise the validated original is used. The key is used only on the server.
 
+## Exam tools, progress and data
+
+- **Exam screen:** a BA II Plus-style calculator (chain arithmetic, STO/RCL, 2nd functions, TVM keys
+  with CPT, BGN, P/Y and C/Y, cash-flow NPV/IRR and AMORT worksheets; `lib/calculator/`, unit-tested
+  against handheld results) beside the working pad; keyboard shortcuts (A–E answer, ← / → move,
+  F flag, 1–5 confidence, ? help); a Prometric-style review screen (review all, flagged or
+  unanswered before ending); a wall-clock timer that keeps running in another tab; confidence is
+  optional in timed exams and required only where the diagnostic analyses it.
+- **Home and Progress:** Home shows readiness, key numbers, sessions in progress, the score trend
+  and recent sessions; `/progress` has Overview (trend against the pass mark, readiness range),
+  Mastery, Concepts, Question formats and a paginated History with backup, restore and reset.
+  Reports open with a summary: score against the pass mark, the three things to look at, and next
+  steps.
+- **Speed:** history analytics are computed once per history version and stored (memory and the
+  `Snapshot` table); question payloads are parsed once per run. Exams and the dashboard no longer
+  re-read every answered question.
+- **API:** every route validates its body with shared zod schemas (`lib/api/schemas.ts`) and returns
+  400 / 404 / 409 / 500 correctly; reading a session never changes it.
+- **Backup:** `GET /api/backup` downloads everything as JSON; restoring (`POST /api/backup`) first
+  saves the current history next to the database.
+- **Server:** the desktop app listens on 127.0.0.1 only.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs typecheck, lint, unit tests and the SymPy check on every push, then
+the Playwright browser tests (`npm run test:e2e`): visual snapshots of the main pages in light and
+dark mode, a WCAG AA contrast sweep over every visible text element, the theme toggle, the exam
+flow and API status codes. Browser tests build into `.next-e2e` and use a temporary database.
+Snapshots are kept per platform; run the **Update visual baselines** workflow (or
+`npm run test:e2e:update` locally) after an intended design change.
+
 ## Design system
 
 The interface follows Google's design language (Material 3 with Google Workspace surfaces and a

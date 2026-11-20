@@ -4,6 +4,7 @@
  * Uses a temporary SQLite database so persistence tests never touch the real
  * history in data/exam-fm.db.
  */
+import "tsconfig-paths/register";
 import { spawnSync } from "child_process";
 import { mkdtempSync, rmSync } from "fs";
 import os from "os";
@@ -28,6 +29,8 @@ async function main() {
   await import("./persistence.test");
   await import("./study.test");
   await import("./theme.test");
+  await import("./api.test");
+  await import("./calculator.test");
   const failed = await run();
   const { prisma } = await import("../../lib/server/db");
   await prisma.$disconnect();

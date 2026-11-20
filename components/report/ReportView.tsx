@@ -4,12 +4,20 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Badge, Button, Meter, Panel, Tabs } from "@/components/ui";
-import type { DiagnosticReport } from "@/lib/analysis/report";
-import { formatClock } from "@/lib/timer";
 import { LocalTime } from "@/components/LocalTime";
-import { cn, pct } from "@/lib/utils";
+import { Tabs } from "@/components/ui";
+import type { DiagnosticReport } from "@/lib/analysis/report";
+import { cn } from "@/lib/utils";
+
 import { QuestionReview } from "./QuestionReview";
+import type { ReportContext } from "./shared";
+import { CalibrationTab } from "./tabs/CalibrationTab";
+import { ChainsTab } from "./tabs/ChainsTab";
+import { ConceptsTab } from "./tabs/ConceptsTab";
+import { FormatsTab } from "./tabs/FormatsTab";
+import { MistakesTab } from "./tabs/MistakesTab";
+import { OverviewTab } from "./tabs/OverviewTab";
+import { ReasoningTab } from "./tabs/ReasoningTab";
 
 type Tab = "overview" | "reasoning" | "mistakes" | "chains" | "formats" | "concepts" | "calibration" | "questions";
 
@@ -23,21 +31,6 @@ const MODE_LABELS: Record<string, string> = {
   TRANSFER: "Transfer check",
 };
 
-const toneFor = (score: number | null) => (score === null ? "neutral" : score >= 0.75 ? "good" : score >= 0.5 ? "warn" : "bad");
-
-function PositionList({ positions, onOpen }: { positions: number[]; onOpen: (p: number) => void }) {
-  if (!positions.length) return <span className="text-muted-foreground">none</span>;
-  return (
-    <span className="space-x-1">
-      {positions.map((p) => (
-        <button key={p} onClick={() => onOpen(p)} className="rounded border px-1.5 text-xs tabular-nums hover:bg-accent">
-          Q{p}
-        </button>
-      ))}
-    </span>
-  );
-}
-
 const TABS: Tab[] = ["overview", "reasoning", "mistakes", "chains", "formats", "concepts", "calibration", "questions"];
 
 export function ReportView({ report, remediationDue, initialTab, initialQuestion }: { report: DiagnosticReport; remediationDue: number; initialTab?: string; initialQuestion?: number }) {
@@ -45,7 +38,6 @@ export function ReportView({ report, remediationDue, initialTab, initialQuestion
   const [tab, setTab] = useState<Tab>(TABS.includes(initialTab as Tab) ? (initialTab as Tab) : "overview");
   const [open, setOpen] = useState<number>(initialQuestion && report.questions.some((q) => q.position === initialQuestion) ? initialQuestion : report.questions[0]?.position ?? 1);
   const [starting, setStarting] = useState(false);
-  const o = report.overall;
 
   const openQuestion = (position: number) => {
     setOpen(position);
@@ -62,6 +54,7 @@ export function ReportView({ report, remediationDue, initialTab, initialQuestion
   };
 
   const current = report.questions.find((q) => q.position === open);
+  const ctx: ReportContext = { report, openQuestion, remediationDue, starting, startRemediation };
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6">
@@ -71,13 +64,8 @@ export function ReportView({ report, remediationDue, initialTab, initialQuestion
           <h1 className="font-display text-[30px] font-semibold sm:text-[32px]">Diagnostic report</h1>
         </div>
         <div className="flex gap-2">
-          {remediationDue > 0 && (
-            <Button onClick={() => void startRemediation()} disabled={starting}>
-              {starting ? "Generating…" : `Start remediation (${remediationDue} due)`}
-            </Button>
-          )}
-          <Link href="/" className="inline-flex h-9 items-center rounded-full border px-5 text-sm font-medium text-primary hover:bg-primary/5">
-            Dashboard
+          <Link href="/progress" className="inline-flex h-10 items-center rounded-pill border px-6 text-sm font-medium text-primary hover:bg-primary/[0.08]">
+            Progress
           </Link>
         </div>
       </div>
@@ -97,464 +85,19 @@ export function ReportView({ report, remediationDue, initialTab, initialQuestion
         onChange={setTab}
       />
 
-      {tab === "overview" && (
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {[
-              ["Score", `${o.percent}%`],
-              ["Correct", `${o.correct} / ${o.total}`],
-              ["Incorrect", String(o.incorrect)],
-              ["Not answered", String(o.unanswered)],
-              ["Average time", formatClock(o.averageSeconds)],
-            ].map(([label, value]) => (
-              <div key={label} className="panel p-3">
-                <div className="eyebrow">{label}</div>
-                <div className="stat">{value}</div>
-              </div>
-            ))}
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Accuracy by difficulty (kept separate)">
-              <div className="space-y-3">
-                {report.byDifficulty.map((d) => (
-                  <div key={d.level}>
-                    <div className="flex justify-between text-sm">
-                      <span>{d.label}</span>
-                      <span className="tabular-nums">
-                        {d.correct}/{d.total} · {pct(d.correct, d.total)}
-                      </span>
-                    </div>
-                    <Meter value={d.total ? d.correct / d.total : null} tone={toneFor(d.total ? d.correct / d.total : null)} />
-                  </div>
-                ))}
-                <p className="text-xs text-muted-foreground">SOA-standard accuracy is what measures exam readiness; challenge questions are deliberately harder and are not required for it.</p>
-              </div>
-            </Panel>
-            <Panel title="Accuracy by syllabus topic (revealed after submission)">
-              <div className="space-y-3">
-                {report.byTopic
-                  .filter((t) => t.total > 0)
-                  .map((t) => (
-                    <div key={t.topic}>
-                      <div className="flex justify-between text-sm">
-                        <span>{t.label}</span>
-                        <span className="tabular-nums">
-                          {t.correct}/{t.total}
-                        </span>
-                      </div>
-                      <Meter value={t.correct / t.total} tone={toneFor(t.correct / t.total)} />
-                    </div>
-                  ))}
-              </div>
-            </Panel>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Why answers were wrong (inferred from the options chosen and your working)">
-              {report.causes.length ? (
-                <ul className="space-y-2 text-sm">
-                  {report.causes.map((c) => (
-                    <li key={c.cause} className="flex items-center justify-between gap-2">
-                      <span>{c.label}</span>
-                      <PositionList positions={c.positions} onOpen={openQuestion} />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">No incorrect answers to classify.</p>
-              )}
-            </Panel>
-            <Panel title="Questions that took unusually long">
-              {o.longQuestions.length ? (
-                <ul className="space-y-1 text-sm">
-                  {o.longQuestions.map((q) => (
-                    <li key={q.position} className="flex justify-between">
-                      <button className="underline-offset-2 hover:underline" onClick={() => openQuestion(q.position)}>
-                        Question {q.position}
-                      </button>
-                      <span className="tabular-nums">{formatClock(q.seconds)}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">None beyond {formatClock(report.timing.thresholdSeconds)}.</p>
-              )}
-            </Panel>
-          </div>
-          <Panel title="How to read this report">
-            <ul className="list-disc space-y-1 pl-5 text-sm">
-              {report.notes.map((n) => (
-                <li key={n}>{n}</li>
-              ))}
-            </ul>
-          </Panel>
-        </div>
-      )}
+      {tab === "overview" && <OverviewTab ctx={ctx} />}
 
-      {tab === "reasoning" && (
-        <Panel title="Mathematical reasoning profile (this session)">
-          <div className="grid gap-x-8 gap-y-4 md:grid-cols-2">
-            {report.reasoning.map((s) => (
-              <div key={s.skill}>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{s.label}</span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {s.status === "INSUFFICIENT" ? "insufficient evidence" : `${Math.round((s.score ?? 0) * 100)}%`}
-                  </span>
-                </div>
-                <Meter value={s.status === "INSUFFICIENT" ? null : s.score} tone={s.status === "INSUFFICIENT" ? "neutral" : toneFor(s.score)} />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  <b>Observed:</b> {s.observedText} {s.inferredText && <><b>Inferred:</b> {s.inferredText}</>}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
+      {tab === "reasoning" && <ReasoningTab ctx={ctx} />}
 
-      {tab === "mistakes" && (
-        <div className="space-y-4">
-          <Panel title="Mistakes your chosen answers correspond to">
-            {report.misconceptions.length ? (
-              <div className="space-y-3">
-                {report.misconceptions.map((m) => (
-                  <div key={m.id} className="rounded-md border p-3 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold">{m.label}</span>
-                      <Badge tone="bad">{m.category}</Badge>
-                      <span className="text-muted-foreground">
-                        ×{m.count} — <PositionList positions={m.positions} onOpen={openQuestion} />
-                      </span>
-                    </div>
-                    <p className="mt-1">
-                      <b>Correct relationship:</b> {m.principle}
-                    </p>
-                    <p className="mt-1 text-muted-foreground">
-                      <b>Recognise it:</b> {m.recognition}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No distractor was chosen in this session.</p>
-            )}
-          </Panel>
-          {report.categories.length > 0 && (
-            <Panel title="By category">
-              <div className="flex flex-wrap gap-2">
-                {report.categories.map((c) => (
-                  <Badge key={c.category}>
-                    {c.label}: {c.count}
-                  </Badge>
-                ))}
-              </div>
-            </Panel>
-          )}
-          {report.remediation.length > 0 && (
-            <Panel title="Remediation" action={remediationDue > 0 ? <Button size="sm" onClick={() => void startRemediation()} disabled={starting}>Start remediation set</Button> : undefined}>
-              <p className="text-sm">
-                Each mistake above opens a remediation item. The next remediation set gives two new problems on the same principle from different templates; when both are answered correctly the item is retested after 24 hours before it counts as corrected.
-              </p>
-            </Panel>
-          )}
-        </div>
-      )}
+      {tab === "mistakes" && <MistakesTab ctx={ctx} />}
 
-      {tab === "chains" && (
-        <div className="space-y-4">
-          <Panel title="Accuracy by formula-integration level">
-            <div className="space-y-2">
-              {report.chains.byLevel.map((row) => (
-                <div key={row.level} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-sm">
-                  <span>
-                    Level {row.level}: {row.label}
-                  </span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {row.correct} / {row.total} · {pct(row.correct, row.total)}
-                  </span>
-                  <Meter value={row.total ? row.correct / row.total : 0} tone={toneFor(row.total ? row.correct / row.total : null)} className="col-span-2" />
-                </div>
-              ))}
-            </div>
-          </Panel>
-          <Panel title="Where the wrong answers left the formula chain">
-            {report.chains.breaks.length ? (
-              <div className="space-y-4 text-sm">
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {report.chains.byKind.map((k) => (
-                    <div key={k.kind} className="rounded-md border p-3">
-                      <div className="text-2xl font-semibold tabular-nums">{k.count}</div>
-                      <div className="font-medium">{k.label}</div>
-                      <div className="mt-1">
-                        <PositionList positions={k.positions} onOpen={openQuestion} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <table className="w-full text-left">
-                  <thead className="text-xs text-muted-foreground">
-                    <tr>
-                      <th className="py-1">Question</th>
-                      <th>Step</th>
-                      <th>Formula at that step</th>
-                      <th>Kind of error</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.chains.breaks.map((b) => (
-                      <tr key={b.position} className="border-t">
-                        <td className="py-1.5">
-                          <PositionList positions={[b.position]} onOpen={openQuestion} />
-                        </td>
-                        <td className="tabular-nums">
-                          {b.stage + 1} of {b.steps}
-                        </td>
-                        <td>{b.formulaName}</td>
-                        <td>{b.kind === "selection" && b.wrongFormula ? "Selecting the right formula (substituted another)" : report.chains.byKind.find((k) => k.kind === b.kind)?.label}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {report.chains.formulas.some((f) => f.count > 1) && (
-                  <p>
-                    <b>Recurring:</b>{" "}
-                    {report.chains.formulas
-                      .filter((f) => f.count > 1)
-                      .map((f) => `${f.name} (${f.count}×)`)
-                      .join(", ")}
-                    . Check this formula’s conditions and common misuse in the{" "}
-                    <Link href="/formulas" className="text-primary hover:underline">
-                      formula library
-                    </Link>
-                    .
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No wrong answer in this session, so no chain break to locate.</p>
-            )}
-          </Panel>
-          <p className="text-xs text-muted-foreground">
-            Each wrong option was generated from a specific mistake at a specific step of the solution, so the step is known exactly from the option chosen. Whether the mistake was in choosing the formula, applying it, linking it to the next step or reading the result is the
-            kind recorded for that option; your working, when it contains intermediate values, is used to confirm it in the question review.
-          </p>
-        </div>
-      )}
+      {tab === "chains" && <ChainsTab ctx={ctx} />}
 
-      {tab === "formats" && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Numerical versus non-numerical answers">
-            <div className="space-y-3">
-              {report.formats.split.map((r) => (
-                <div key={r.kind}>
-                  <div className="flex justify-between text-sm">
-                    <span>{r.label}</span>
-                    <span className="tabular-nums">
-                      {r.correct}/{r.total} · {pct(r.correct, r.total)} · avg {formatClock(r.averageSeconds)}
-                    </span>
-                  </div>
-                  <Meter value={r.total ? r.correct / r.total : null} tone={toneFor(r.total ? r.correct / r.total : null)} />
-                </div>
-              ))}
-              {report.formats.practice.length > 1 && (
-                <p className="text-xs text-muted-foreground">
-                  {report.formats.practice.map((p) => `${p.label}: ${p.correct}/${p.total}`).join(" · ")}
-                </p>
-              )}
-            </div>
-          </Panel>
-          <Panel title="Accuracy by question format">
-            <table className="w-full text-sm tabular-nums">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="py-1 font-normal">Format</th>
-                  <th className="font-normal">Correct</th>
-                  <th className="font-normal">Avg time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.formats.byFormat.map((f) => (
-                  <tr key={f.format} className="border-t">
-                    <td className="py-1 pr-2">{f.label}</td>
-                    <td>
-                      {f.correct}/{f.total}
-                    </td>
-                    <td>{formatClock(f.averageSeconds)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Panel>
-          <Panel title="Time by format and difficulty">
-            <table className="w-full text-sm tabular-nums">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="py-1 font-normal">Format</th>
-                  <th className="font-normal">Level</th>
-                  <th className="font-normal">Questions</th>
-                  <th className="font-normal">Avg time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.formats.time.map((t) => (
-                  <tr key={`${t.format}-${t.level}`} className="border-t">
-                    <td className="py-1 pr-2">{t.label}</td>
-                    <td>{t.level}</td>
-                    <td>{t.total}</td>
-                    <td>{formatClock(t.averageSeconds)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Panel>
-          <Panel title="Reasoning depth (structural, from each question's chain)">
-            <div className="space-y-3">
-              {report.formats.depth.map((d) => (
-                <div key={d.steps}>
-                  <div className="flex justify-between text-sm">
-                    <span>{d.steps}</span>
-                    <span className="tabular-nums">
-                      {d.correct}/{d.total} · avg {formatClock(d.averageSeconds)}
-                    </span>
-                  </div>
-                  <Meter value={d.total ? d.correct / d.total : null} tone={toneFor(d.total ? d.correct / d.total : null)} />
-                </div>
-              ))}
-              <p className="text-xs text-muted-foreground">
-                Steps are counted from each question&apos;s formula or concept chain — a structural measure of depth, not a psychometric difficulty estimate.
-              </p>
-            </div>
-          </Panel>
-        </div>
-      )}
+      {tab === "formats" && <FormatsTab ctx={ctx} />}
 
-      {tab === "concepts" && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Panel title={`Concept questions: ${report.concepts.correct} of ${report.concepts.total} correct`}>
-            <div className="eyebrow mb-1">Where the reasoning failed</div>
-            {report.concepts.byFailure.length ? (
-              <ul className="space-y-1 text-sm">
-                {report.concepts.byFailure.map((f) => (
-                  <li key={f.kind} className="flex items-center justify-between gap-2">
-                    <span>{f.label}</span>
-                    <PositionList positions={f.positions} onOpen={openQuestion} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No conceptual failures in this session.</p>
-            )}
-          </Panel>
-          <Panel title="Concepts missed and confused">
-            <div className="space-y-3 text-sm">
-              <div>
-                <div className="eyebrow mb-1">Concepts at the failing step</div>
-                {report.concepts.missed.length ? (
-                  <ul className="space-y-1">
-                    {report.concepts.missed.map((m) => (
-                      <li key={m.id} className="flex items-center justify-between gap-2">
-                        <span>{m.label}</span>
-                        <PositionList positions={m.positions} onOpen={openQuestion} />
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-muted-foreground">None.</p>
-                )}
-              </div>
-              <div>
-                <div className="eyebrow mb-1">Confused pairs</div>
-                {report.concepts.confused.length ? (
-                  <ul className="space-y-1">
-                    {report.concepts.confused.map((c) => (
-                      <li key={`${c.a}|${c.b}`} className="flex items-center justify-between gap-2">
-                        <span>
-                          {c.aLabel} ↔ {c.bLabel}
-                        </span>
-                        <PositionList positions={c.positions} onOpen={openQuestion} />
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-muted-foreground">None.</p>
-                )}
-              </div>
-            </div>
-          </Panel>
-        </div>
-      )}
+      {tab === "concepts" && <ConceptsTab ctx={ctx} />}
 
-      {tab === "calibration" && (
-        <div className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Confidence against outcome">
-              <table className="w-full text-sm tabular-nums">
-                <thead className="text-left text-xs text-muted-foreground">
-                  <tr>
-                    <th className="py-1">Confidence</th>
-                    <th>Answers</th>
-                    <th>Correct</th>
-                    <th>Accuracy</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.confidence.table.map((row) => (
-                    <tr key={row.level} className="border-t">
-                      <td className="py-1">{row.label}</td>
-                      <td>{row.total}</td>
-                      <td>{row.correct}</td>
-                      <td>{pct(row.correct, row.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Panel>
-            <Panel title="Questions to look at">
-              <dl className="space-y-2 text-sm">
-                {(
-                  [
-                    ["High confidence, incorrect (overconfidence)", report.confidence.highConfidenceWrong],
-                    ["Low confidence, correct", report.confidence.lowConfidenceCorrect],
-                    ["Correct, but reasoning not evidenced", report.confidence.weakReasoningCorrect],
-                    ["Correct method in working, wrong result", report.confidence.methodRightExecutionWrong],
-                  ] as Array<[string, number[]]>
-                ).map(([label, positions]) => (
-                  <div key={label} className="flex flex-wrap items-center justify-between gap-2">
-                    <dt>{label}</dt>
-                    <dd>
-                      <PositionList positions={positions} onOpen={openQuestion} />
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            </Panel>
-          </div>
-          <Panel title="Where errors cluster (time pressure analysis)">
-            <table className="w-full text-sm tabular-nums">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="py-1">Question feature</th>
-                  <th>Error rate with it</th>
-                  <th>Error rate without it</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.timing.comparisons.map((c) => (
-                  <tr key={c.label} className="border-t">
-                    <td className="py-1">{c.label}</td>
-                    <td className={cn(c.withCount && c.withoutCount && c.withErrors / c.withCount > c.withoutErrors / c.withoutCount + 0.15 && "font-semibold text-destructive")}>
-                      {c.withCount ? `${c.withErrors}/${c.withCount} (${pct(c.withErrors, c.withCount)})` : "—"}
-                    </td>
-                    <td>{c.withoutCount ? `${c.withoutErrors}/${c.withoutCount} (${pct(c.withoutErrors, c.withoutCount)})` : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-2 text-xs text-muted-foreground">
-              “Unusually long” means more than {formatClock(report.timing.thresholdSeconds)}. These are observed counts; with few questions in a group, a difference may be chance.
-            </p>
-          </Panel>
-        </div>
-      )}
+      {tab === "calibration" && <CalibrationTab ctx={ctx} />}
 
       {tab === "questions" && (
         <div className="grid gap-4 lg:grid-cols-[13rem_minmax(0,1fr)]">

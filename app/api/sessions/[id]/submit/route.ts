@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
 
-import { saveProgress, submitSession, type ProgressPatch } from "@/lib/server/repository";
+import { fromError, parseBody } from "@/lib/api/http";
+import { ProgressBody } from "@/lib/api/schemas";
+import { saveProgress, submitSession } from "@/lib/server/repository";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
-  const patch = (await request.json().catch(() => ({}))) as ProgressPatch;
+  const parsed = await parseBody(request, ProgressBody, { optional: true });
+  if (!parsed.ok) return parsed.response;
   try {
+    const patch = parsed.data;
     if (patch.answers?.length || patch.elapsedSeconds !== undefined) await saveProgress(params.id, patch);
     await submitSession(params.id);
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 404 });
+  } catch (e) {
+    return fromError(e);
   }
 }

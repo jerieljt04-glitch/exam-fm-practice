@@ -1,11 +1,13 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 
+import { error, parseBody } from "@/lib/api/http";
+import { ConceptQuestionBody } from "@/lib/api/schemas";
 import { buildChoiceQuestion } from "@/lib/engine/assemble";
-import { CONCEPT_FOCUS_LABELS, matchesFocus, type ConceptFocus } from "@/lib/engine/session";
+import { matchesFocus } from "@/lib/engine/session";
 import { CONCEPT_TEMPLATES } from "@/lib/engine/templates";
 import type { Difficulty } from "@/lib/engine/types";
-import { TOPIC_ORDER, type TopicId } from "@/lib/syllabus";
+import { randomIndex, shuffle } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -16,21 +18,21 @@ export const dynamic = "force-dynamic";
  * toward the closed-book concept mastery measured by exam-style sessions.
  */
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const topic = TOPIC_ORDER.includes(body.topic as TopicId) ? (body.topic as TopicId) : null;
-  const focus = (Object.keys(CONCEPT_FOCUS_LABELS) as ConceptFocus[]).includes(body.focus as ConceptFocus) ? (body.focus as ConceptFocus) : "mixed";
-  const level = [1, 2, 3].includes(Number(body.level)) ? (Number(body.level) as Difficulty) : null;
-  const recent = new Set(Array.isArray(body.exclude) ? body.exclude.filter((x): x is string => typeof x === "string") : []);
+  const parsed = await parseBody(request, ConceptQuestionBody, { optional: true });
+  if (!parsed.ok) return parsed.response;
+  const { topic, focus = "mixed", level: rawLevel, exclude = [] } = parsed.data;
+  const level = typeof rawLevel === "number" ? (rawLevel as Difficulty) : null;
+  const recent = new Set(exclude);
 
   const pool = CONCEPT_TEMPLATES.filter((t) => (!topic || t.topic === topic) && matchesFocus(t, focus) && (!level || t.levels.includes(level)));
-  if (!pool.length) return NextResponse.json({ error: "No concept questions match these filters." }, { status: 404 });
+  if (!pool.length) return error(404, "No concept questions match these filters.");
   const fresh = pool.filter((t) => !recent.has(t.id));
-  const candidates = [...(fresh.length ? fresh : pool)].sort(() => Math.random() - 0.5);
+  const candidates = shuffle(fresh.length ? fresh : pool);
 
   for (const template of candidates.slice(0, 6)) {
-    const lvl = level ?? template.levels[Math.floor(Math.random() * template.levels.length)];
+    const lvl = level ?? template.levels[randomIndex(template.levels.length)];
     const { instance } = buildChoiceQuestion(template, lvl, randomUUID());
     if (instance) return NextResponse.json({ instance });
   }
-  return NextResponse.json({ error: "Could not generate a valid question; try again." }, { status: 500 });
+  return error(500, "Could not generate a valid question; try again.");
 }

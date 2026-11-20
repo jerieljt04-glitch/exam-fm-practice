@@ -2,9 +2,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Calculator as CalcIcon, ChevronLeft, ChevronRight, Flag, Keyboard, NotebookPen, Sigma } from "lucide-react";
 
 import { Exhibits } from "@/components/answers/Exhibits";
 import { OptionContentView, statementCountOf } from "@/components/answers/OptionContentView";
+import { Calculator } from "@/components/calculator/Calculator";
 import { FormulaLibrary } from "@/components/formulas/FormulaLibrary";
 import { MathRenderer } from "@/components/MathRenderer";
 import { Badge, Button, Modal } from "@/components/ui";
@@ -14,11 +16,38 @@ import type { ResponseState, SessionView } from "@/lib/server/repository";
 import { formatClock, remainingSeconds } from "@/lib/timer";
 import { cn } from "@/lib/utils";
 
+import { QuestionNavigator } from "./QuestionNavigator";
+import { ReviewScreen, type ReviewFilter } from "./ReviewScreen";
 import { Scratchpad } from "./Scratchpad";
+import { useExamShortcuts } from "./useExamShortcuts";
 
 type Patch = Partial<Omit<ResponseState, "timeSpentSeconds">>;
+type SidePane = "working" | "calculator" | "formulas";
+type Question = SessionView["questions"][number];
 
 const AUTOSAVE_MS = 8000;
+
+const SHORTCUTS: Array<[string, string]> = [
+  ["A – E", "Choose an answer (press again to clear)"],
+  ["← / →", "Previous / next question"],
+  ["F", "Flag or unflag for review"],
+  ["1 – 5", "Confidence, very low to very high"],
+  ["?", "Show these shortcuts"],
+];
+
+const FILTER_LABEL: Record<ReviewFilter, string> = {
+  all: "all questions",
+  flagged: "flagged questions",
+  unanswered: "unanswered questions",
+  incomplete: "questions missing a confidence rating",
+};
+
+function matches(filter: ReviewFilter | null, q: Question): boolean {
+  if (filter === null || filter === "all") return true;
+  if (filter === "flagged") return q.response.flagged;
+  if (filter === "unanswered") return !q.response.selectedKey;
+  return Boolean(q.response.selectedKey && !q.response.confidence);
+}
 
 export function SessionRunner({ initial }: { initial: SessionView }) {
   const router = useRouter();
@@ -26,11 +55,14 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
   const [index, setIndex] = useState(Math.min(initial.currentIndex, initial.questions.length - 1));
   const [elapsed, setElapsed] = useState(initial.elapsedSeconds);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "unsaved" | "error">("saved");
-  const [submitOpen, setSubmitOpen] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [filter, setFilter] = useState<ReviewFilter | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [navOpen, setNavOpen] = useState(true);
-  const [sidePane, setSidePane] = useState<"working" | "formulas">("working");
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [sidePane, setSidePane] = useState<SidePane>("working");
   const supported = initial.reference === "supported";
+  // Confidence feeds the diagnostic's calibration analysis; in a timed exam, as on the real exam, it is optional.
+  const confidenceRequired = !initial.timed;
 
   // Pending edits and per-question time not yet sent to the server.
   const pending = useRef(new Map<string, Patch>());
@@ -38,6 +70,8 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
   const elapsedRef = useRef(elapsed);
   const indexRef = useRef(index);
   const submittedRef = useRef(false);
+  // A timed exam's clock is wall-clock time, like the real exam: it keeps running in another tab.
+  const clockStart = useRef(Date.now() - initial.elapsedSeconds * 1000);
   elapsedRef.current = elapsed;
   indexRef.current = index;
 
@@ -76,16 +110,19 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
     }
   }, [buildPayload, initial.id, router]);
 
-  // Clock: counts only while the page is visible.
+  // Clock: timed sessions follow the wall clock; untimed ones count only while the page is visible.
+  // Time on the current question accrues only while it is on screen.
   useEffect(() => {
     const id = setInterval(() => {
-      if (document.visibilityState !== "visible" || submittedRef.current) return;
-      setElapsed((e) => e + 1);
+      if (submittedRef.current) return;
+      const visible = document.visibilityState === "visible";
+      if (initial.timed) setElapsed(Math.floor((Date.now() - clockStart.current) / 1000));
+      else if (visible) setElapsed((e) => e + 1);
       const qid = questions[indexRef.current]?.instanceId;
-      if (qid) pendingSeconds.current.set(qid, (pendingSeconds.current.get(qid) ?? 0) + 1);
+      if (visible && qid) pendingSeconds.current.set(qid, (pendingSeconds.current.get(qid) ?? 0) + 1);
     }, 1000);
     return () => clearInterval(id);
-  }, [questions]);
+  }, [questions, initial.timed]);
 
   // Autosave on a timer, when the tab is hidden, and when the page closes.
   useEffect(() => {
@@ -124,10 +161,10 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
     }
   }, [buildPayload, initial.id, router]);
 
-  // Time is up: submit whatever has been answered.
+  // Time is up (or the session expired while it was closed): submit whatever has been answered.
   useEffect(() => {
-    if (remaining === 0 && !submittedRef.current) void submit();
-  }, [remaining, submit]);
+    if ((remaining === 0 || initial.expired) && !submittedRef.current) void submit();
+  }, [remaining, submit, initial.expired]);
 
   const update = (patch: Patch) => {
     if (!current) return;
@@ -136,63 +173,97 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
     setSaveState("unsaved");
   };
 
+  // Review mode restricts navigation to the questions in the chosen group.
+  const route = useMemo(() => questions.map((q, i) => ({ q, i })).filter(({ q }) => matches(filter, q)).map(({ i }) => i), [questions, filter]);
+  const posInRoute = route.indexOf(index);
+  const atEnd = filter === null ? index === questions.length - 1 : posInRoute === route.length - 1;
+  const atStart = filter === null ? index === 0 : posInRoute <= 0;
+
   const go = (next: number) => {
     setIndex(Math.max(0, Math.min(questions.length - 1, next)));
+    setReviewing(false);
     void save();
   };
+  const openReview = () => {
+    setReviewing(true);
+    void save();
+  };
+  const step = (dir: 1 | -1) => {
+    if (dir === 1 && atEnd) return openReview();
+    if (dir === -1 && atStart) return;
+    if (filter === null) return go(index + dir);
+    const target = route[(posInRoute < 0 ? 0 : posInRoute) + dir];
+    if (target !== undefined) go(target);
+  };
 
-  const answered = questions.filter((q) => q.response.selectedKey).length;
-  const missingConfidence = questions.map((q, i) => ({ q, i })).filter(({ q }) => q.response.selectedKey && !q.response.confidence);
-  const unanswered = questions.map((q, i) => ({ q, i })).filter(({ q }) => !q.response.selectedKey);
-  const flagged = questions.filter((q) => q.response.flagged).length;
-  const timerTone = remaining !== null && remaining < 300 ? "text-destructive" : remaining !== null && remaining < 900 ? "text-warning" : "";
-  const otherMethod = current?.response.method === "other";
-
-  const navCells = useMemo(
-    () =>
-      questions.map((q, i) => {
-        const state = q.response.selectedKey ? (q.response.confidence ? "done" : "noconf") : "open";
-        return { i, state, flagged: q.response.flagged };
-      }),
-    [questions]
+  useExamShortcuts(
+    {
+      choose: (key) => {
+        if (reviewing || !current.options.some((o) => o.key === key)) return;
+        update({ selectedKey: current.response.selectedKey === key ? null : key });
+      },
+      next: () => !reviewing && step(1),
+      previous: () => !reviewing && step(-1),
+      flag: () => !reviewing && update({ flagged: !current.response.flagged }),
+      confidence: (level) => {
+        if (!reviewing && current.response.selectedKey) update({ confidence: CONFIDENCE_LEVELS[level - 1] as Confidence });
+      },
+      help: () => setHelpOpen(true),
+    },
+    !submitting
   );
 
   if (!current) return null;
 
+  const answered = questions.filter((q) => q.response.selectedKey).length;
+  const flagged = questions.filter((q) => q.response.flagged).length;
+  const timerTone = remaining !== null && remaining < 300 ? "text-destructive" : remaining !== null && remaining < 900 ? "text-warning" : "";
+  const otherMethod = current.response.method === "other";
+  const reviewItems = questions.map((q, i) => ({ index: i, answered: Boolean(q.response.selectedKey), flagged: q.response.flagged, confidence: q.response.confidence }));
+  const panes: Array<{ id: SidePane; label: string; icon: typeof NotebookPen }> = [
+    { id: "working", label: "Working", icon: NotebookPen },
+    { id: "calculator", label: "Calculator", icon: CalcIcon },
+    ...(supported ? [{ id: "formulas" as const, label: "Formulas", icon: Sigma }] : []),
+  ];
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Badge tone="info">{initial.modeLabel}</Badge>
           {initial.reference !== "closed" && <Badge>{REFERENCE_LABELS[initial.reference]}</Badge>}
           {initial.focusLabel && <Badge>{initial.focusLabel}</Badge>}
-          <span className="text-sm font-semibold">
-            Question {index + 1} of {questions.length}
-          </span>
+          <span className="text-sm font-semibold">{reviewing ? "Review screen" : `Question ${index + 1} of ${questions.length}`}</span>
           <span className="text-xs text-muted-foreground">
             {answered} answered · {flagged} flagged
           </span>
+          {filter !== null && !reviewing && (
+            <Badge tone="warn">
+              Reviewing {FILTER_LABEL[filter]} ({posInRoute + 1} of {route.length})
+            </Badge>
+          )}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground" aria-live="polite">
+        <div className="flex items-center gap-2">
+          <span className="hidden text-xs text-muted-foreground sm:inline" aria-live="polite">
             {saveState === "saving" ? "Saving…" : saveState === "unsaved" ? "Unsaved changes" : saveState === "error" ? "Save failed — will retry" : "All changes saved"}
           </span>
+          <button type="button" onClick={() => setHelpOpen(true)} className="inline-flex h-10 w-10 items-center justify-center rounded-pill text-muted-foreground hover:bg-primary/[0.08]" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
+            <Keyboard size={18} strokeWidth={1.75} aria-hidden />
+          </button>
           {remaining !== null ? (
-            <span className={cn("rounded-full border px-4 py-1 font-mono text-base tabular-nums", timerTone)} aria-label="Time remaining">
+            <span className={cn("rounded-pill border px-4 py-1.5 font-mono text-base tabular-nums", timerTone)} aria-label="Time remaining" role="timer">
               {formatClock(remaining)}
             </span>
           ) : (
-            <span className="rounded-full border px-4 py-1 font-mono text-sm tabular-nums text-muted-foreground" aria-label="Time spent">
+            <span className="rounded-pill border px-4 py-1.5 font-mono text-sm tabular-nums text-muted-foreground" aria-label="Time spent">
               {formatClock(elapsed)} · untimed
             </span>
           )}
-          <Button variant="primary" onClick={() => setSubmitOpen(true)}>
-            Submit
-          </Button>
+          {!reviewing && <Button onClick={openReview}>Review &amp; submit</Button>}
         </div>
       </div>
       {initial.notice && (
-        <p role="status" className="mb-3 rounded-md border border-warning bg-warning/10 px-3 py-2 text-sm">
+        <p role="status" className="mb-3 rounded-field bg-warning-container px-4 py-2 text-sm text-warning">
           {initial.notice}
         </p>
       )}
@@ -200,219 +271,180 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
         <div className="google-bar h-full rounded-pill transition-[width] duration-slow ease-emphasized" style={{ width: `${(100 * answered) / questions.length}%`, backgroundSize: `${questions.length ? (100 * questions.length) / Math.max(1, answered) : 100}% 100%` }} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <section className="panel p-6 sm:p-7">
-          <MathRenderer key={current.instanceId} content={current.stem} className="text-[15px]" />
-          <Exhibits key={`exhibits-${current.instanceId}`} exhibits={current.exhibits} className="mt-4" />
-          <fieldset className="mt-5 space-y-2">
-            <legend className="sr-only">Answer choices</legend>
-            {current.options.map((option) => {
-              const selected = current.response.selectedKey === option.key;
-              const rich = option.content !== undefined && option.content.type !== "numeric";
-              return (
-                <label
-                  key={option.key}
-                  className={cn(
-                    "flex min-w-0 cursor-pointer gap-3 rounded-lg border px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ring-offset-background",
-                    rich ? "items-start" : "items-center",
-                    selected ? "border-primary bg-primary-container" : "bg-elevated hover:border-primary/40 hover:shadow-resting"
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name={`answer-${current.instanceId}`}
-                    className="sr-only"
-                    checked={selected}
-                    aria-label={`Option ${option.key}: ${option.display}`}
-                    onChange={() => update({ selectedKey: option.key })}
-                  />
-                  <span
-                    aria-hidden
-                    className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold", selected && "border-primary bg-primary text-primary-foreground")}
+      {reviewing ? (
+        <ReviewScreen
+          items={reviewItems}
+          confidenceRequired={confidenceRequired}
+          remainingLabel={remaining !== null ? formatClock(remaining) : null}
+          submitting={submitting}
+          onReview={(f) => {
+            setFilter(f);
+            const first = questions.findIndex((q) => matches(f, q));
+            go(first >= 0 ? first : 0);
+          }}
+          onJump={(i) => {
+            setFilter(null);
+            go(i);
+          }}
+          onReturn={() => setReviewing(false)}
+          onEnd={() => void submit()}
+        />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+          <section className="panel p-6 sm:p-7" aria-label={`Question ${index + 1}`}>
+            <MathRenderer key={current.instanceId} content={current.stem} className="text-[15px]" />
+            <Exhibits key={`exhibits-${current.instanceId}`} exhibits={current.exhibits} className="mt-4" />
+            <fieldset className="mt-5 space-y-2">
+              <legend className="sr-only">Answer choices</legend>
+              {current.options.map((option) => {
+                const selected = current.response.selectedKey === option.key;
+                const rich = option.content !== undefined && option.content.type !== "numeric";
+                return (
+                  <label
+                    key={option.key}
+                    className={cn(
+                      "flex min-w-0 cursor-pointer gap-3 rounded-lg border px-4 py-3 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ring-offset-background",
+                      rich ? "items-start" : "items-center",
+                      selected ? "border-primary bg-primary-container" : "bg-elevated hover:border-primary/40 hover:shadow-resting"
+                    )}
                   >
-                    {option.key}
-                  </span>
-                  <OptionContentView content={option.content} display={option.display} statementCount={statementCountOf(current.exhibits)} className={cn("flex-1", rich && "pt-0.5")} />
-                </label>
-              );
-            })}
-            {current.response.selectedKey && (
-              <button className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => update({ selectedKey: null })}>
-                Clear answer
-              </button>
-            )}
-          </fieldset>
-
-          <div className="mt-5 space-y-3 border-t pt-4">
-            <div>
-              <div className="mb-1.5 flex items-center gap-2 text-sm font-medium">
-                Confidence {current.response.selectedKey && !current.response.confidence && <Badge tone="warn">required</Badge>}
-              </div>
-              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Confidence">
-                {CONFIDENCE_LEVELS.map((level) => (
-                  <button
-                    key={level}
-                    role="radio"
-                    aria-checked={current.response.confidence === level}
-                    onClick={() => update({ confidence: level as Confidence })}
-                    className={cn("rounded-full border px-4 py-1.5 text-xs font-medium transition-colors", current.response.confidence === level ? "border-primary-container bg-primary-container text-primary-on-container" : "text-muted-foreground hover:bg-accent")}
-                  >
-                    {current.response.confidence === level ? "✓ " : ""}{CONFIDENCE_LABELS[level]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <label className="text-sm">
-                <span className="mb-1 block font-medium">
-                  Method <span className="font-normal text-muted-foreground">(optional)</span>
-                </span>
-                <select
-                  value={current.response.method ?? ""}
-                  onChange={(e) => update({ method: e.target.value || null })}
-                  className="h-10 w-full rounded-field border bg-elevated px-3 text-sm"
-                >
-                  <option value="">Not recorded</option>
-                  {METHODS.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {otherMethod && (
-                <label className="text-sm">
-                  <span className="mb-1 block font-medium">Describe your approach</span>
-                  <input value={current.response.methodNote ?? ""} onChange={(e) => update({ methodNote: e.target.value })} className="h-9 w-full rounded-field border bg-elevated px-2 text-sm" />
-                </label>
+                    <input type="radio" name={`answer-${current.instanceId}`} className="sr-only" checked={selected} aria-label={`Option ${option.key}: ${option.display}`} onChange={() => update({ selectedKey: option.key })} />
+                    <span aria-hidden className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold", selected && "border-primary bg-primary text-primary-foreground")}>
+                      {option.key}
+                    </span>
+                    <OptionContentView content={option.content} display={option.display} statementCount={statementCountOf(current.exhibits)} className={cn("flex-1", rich && "pt-0.5")} />
+                  </label>
+                );
+              })}
+              {current.response.selectedKey && (
+                <button className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => update({ selectedKey: null })}>
+                  Clear answer
+                </button>
               )}
+            </fieldset>
+
+            <div className="mt-5 space-y-3 border-t pt-4">
+              <div>
+                <div className="mb-1.5 flex items-center gap-2 text-sm font-medium">
+                  Confidence
+                  {confidenceRequired ? (
+                    current.response.selectedKey && !current.response.confidence && <Badge tone="warn">required</Badge>
+                  ) : (
+                    <span className="font-normal text-muted-foreground">(optional)</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Confidence">
+                  {CONFIDENCE_LEVELS.map((level, k) => (
+                    <button
+                      key={level}
+                      role="radio"
+                      aria-checked={current.response.confidence === level}
+                      onClick={() => update({ confidence: current.response.confidence === level ? null : (level as Confidence) })}
+                      title={`Shortcut: ${k + 1}`}
+                      className={cn(
+                        "rounded-pill border px-4 py-1.5 text-xs font-medium",
+                        current.response.confidence === level ? "border-primary-container bg-primary-container text-primary-on-container" : "text-muted-foreground hover:bg-accent"
+                      )}
+                    >
+                      {current.response.confidence === level ? "✓ " : ""}
+                      {CONFIDENCE_LABELS[level]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium">
+                    Method <span className="font-normal text-muted-foreground">(optional)</span>
+                  </span>
+                  <select value={current.response.method ?? ""} onChange={(e) => update({ method: e.target.value || null })} className="h-10 w-full rounded-field border bg-elevated px-3 text-sm">
+                    <option value="">Not recorded</option>
+                    {METHODS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {otherMethod && (
+                  <label className="text-sm">
+                    <span className="mb-1 block font-medium">Describe your approach</span>
+                    <input value={current.response.methodNote ?? ""} onChange={(e) => update({ methodNote: e.target.value })} className="h-10 w-full rounded-field border bg-elevated px-3 text-sm" />
+                  </label>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="mt-5 flex items-center justify-between border-t pt-4">
-            <Button variant="outlined" onClick={() => go(index - 1)} disabled={index === 0}>
-              ← Previous
-            </Button>
-            <button
-              onClick={() => update({ flagged: !current.response.flagged })}
-              className={cn("rounded-full border px-4 py-1.5 text-sm font-medium transition-colors", current.response.flagged ? "border-warning/40 bg-warning/15 text-warning" : "text-muted-foreground hover:bg-accent")}
-              aria-pressed={current.response.flagged}
-            >
-              {current.response.flagged ? "⚑ Flagged for review" : "⚐ Flag for review"}
-            </button>
-            <Button variant="outlined" onClick={() => go(index + 1)} disabled={index === questions.length - 1}>
-              Next →
-            </Button>
-          </div>
-        </section>
+            <div className="mt-5 flex items-center justify-between border-t pt-4">
+              <Button variant="outlined" onClick={() => step(-1)} disabled={atStart}>
+                <ChevronLeft size={16} aria-hidden /> Previous
+              </Button>
+              <button
+                onClick={() => update({ flagged: !current.response.flagged })}
+                className={cn("inline-flex items-center gap-2 rounded-pill border px-4 py-1.5 text-sm font-medium", current.response.flagged ? "border-warning/40 bg-warning-container text-warning" : "text-muted-foreground hover:bg-accent")}
+                aria-pressed={current.response.flagged}
+                title="Shortcut: F"
+              >
+                <Flag size={14} strokeWidth={1.75} aria-hidden /> {current.response.flagged ? "Flagged for review" : "Flag for review"}
+              </button>
+              <Button variant="outlined" onClick={() => step(1)}>
+                {atEnd ? "Review screen" : "Next"} <ChevronRight size={16} aria-hidden />
+              </Button>
+            </div>
+          </section>
 
-        <section className="panel flex flex-col p-3">
-          <div className="mb-2 flex items-center justify-between">
-            {supported ? (
-              <div className="flex gap-1" role="tablist">
-                {(["working", "formulas"] as const).map((pane) => (
+          <section className="panel flex flex-col p-3" aria-label="Tools">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex gap-1" role="tablist" aria-label="Tools">
+                {panes.map(({ id, label, icon: Icon }) => (
                   <button
-                    key={pane}
+                    key={id}
                     role="tab"
-                    aria-selected={sidePane === pane}
-                    onClick={() => setSidePane(pane)}
-                    className={cn("rounded-full px-4 py-1.5 text-sm font-medium", sidePane === pane ? "bg-primary-container text-primary-on-container" : "text-muted-foreground hover:bg-accent")}
+                    aria-selected={sidePane === id}
+                    onClick={() => setSidePane(id)}
+                    className={cn("inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-sm font-medium", sidePane === id ? "bg-primary-container text-primary-on-container" : "text-muted-foreground hover:bg-accent")}
                   >
-                    {pane === "working" ? "Working" : "Formula library"}
+                    <Icon size={15} strokeWidth={1.75} aria-hidden /> {label}
                   </button>
                 ))}
               </div>
-            ) : (
-              <h2 className="text-sm font-semibold">Working</h2>
-            )}
-            <span className="text-xs text-muted-foreground">{sidePane === "formulas" && supported ? "reference only — not scored" : "saved with your answer"}</span>
-          </div>
-          {supported && sidePane === "formulas" ? (
-            <FormulaLibrary key={current.instanceId} compact highlight={current.formulas} />
-          ) : (
-            <Scratchpad key={current.instanceId} value={current.response.working} onChange={(working) => update({ working })} />
-          )}
-        </section>
-      </div>
-
-      <section className="panel mt-4 p-3">
-        <button className="flex w-full items-center justify-between text-sm font-semibold" onClick={() => setNavOpen((o) => !o)} aria-expanded={navOpen}>
-          Question navigator
-          <span className="text-xs font-normal text-muted-foreground">{navOpen ? "hide" : "show"}</span>
-        </button>
-        {navOpen && (
-          <>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {navCells.map((cell) => (
-                <button
-                  key={cell.i}
-                  onClick={() => go(cell.i)}
-                  className={cn(
-                    "relative h-9 w-9 rounded-full border text-sm tabular-nums transition-colors hover:bg-accent",
-                    cell.i === index && "ring-2 ring-primary ring-offset-1 ring-offset-card",
-                    cell.state === "done" && "border-primary-container bg-primary-container text-primary-on-container",
-                    cell.state === "noconf" && "border-warning bg-warning/10"
-                  )}
-                  aria-label={`Question ${cell.i + 1}${cell.state === "open" ? ", not answered" : ""}${cell.state === "noconf" ? ", confidence missing" : ""}${cell.flagged ? ", flagged" : ""}`}
-                >
-                  {cell.i + 1}
-                  {cell.flagged && <span className="absolute -right-1 -top-1 text-[10px] text-warning">⚑</span>}
-                </button>
-              ))}
+              <span className="text-xs text-muted-foreground">{sidePane === "working" ? "saved with your answer" : sidePane === "calculator" ? "BA II Plus style" : "reference only — not scored"}</span>
             </div>
-            <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-              <span>shaded: answered</span>
-              <span className="text-warning">amber: confidence missing</span>
-              <span>⚑ flagged</span>
+            {/* The calculator stays mounted across questions, keeping its memory like the handheld. */}
+            <div className={cn(sidePane !== "calculator" && "hidden")}>
+              <Calculator storageKey={`exam-fm-calc:${initial.id}`} />
             </div>
-          </>
-        )}
-      </section>
+            {sidePane === "formulas" && supported && <FormulaLibrary key={current.instanceId} compact highlight={current.formulas} />}
+            {sidePane === "working" && <Scratchpad key={current.instanceId} value={current.response.working} onChange={(working) => update({ working })} />}
+          </section>
+        </div>
+      )}
 
-      <Modal
-        open={submitOpen}
-        onClose={() => setSubmitOpen(false)}
-        title="Submit this session?"
-        footer={
-          <>
-            <Button variant="outlined" onClick={() => setSubmitOpen(false)}>
-              Keep working
-            </Button>
-            <Button onClick={() => void submit()} disabled={submitting || missingConfidence.length > 0}>
-              {submitting ? "Submitting…" : "Submit and see the report"}
-            </Button>
-          </>
-        }
-      >
-        <p>Answers, explanations and the diagnostic report are shown only after submission. You cannot change answers afterwards.</p>
-        <ul className="mt-3 space-y-1">
-          <li>
-            {answered} of {questions.length} answered.
-          </li>
-          {unanswered.length > 0 && (
-            <li>
-              Not answered:{" "}
-              {unanswered.map(({ i }) => (
-                <button key={i} className="mr-1 underline" onClick={() => { setSubmitOpen(false); go(i); }}>
-                  {i + 1}
-                </button>
-              ))}
-            </li>
-          )}
-          {flagged > 0 && <li>{flagged} flagged for review.</li>}
-        </ul>
-        {missingConfidence.length > 0 && (
-          <p className="mt-3 rounded-md bg-warning/15 p-2 text-sm">
-            Record a confidence rating for every answered question first:{" "}
-            {missingConfidence.map(({ i }) => (
-              <button key={i} className="mr-1 font-semibold underline" onClick={() => { setSubmitOpen(false); go(i); }}>
-                {i + 1}
-              </button>
-            ))}
-          </p>
-        )}
+      {!reviewing && (
+        <QuestionNavigator
+          questions={questions}
+          index={index}
+          confidenceRequired={confidenceRequired}
+          onGo={(i) => {
+            setFilter(null);
+            go(i);
+          }}
+        />
+      )}
+
+      <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="Keyboard shortcuts" footer={<Button onClick={() => setHelpOpen(false)}>Close</Button>}>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
+          {SHORTCUTS.map(([keys, what]) => (
+            <React.Fragment key={keys}>
+              <dt>
+                <kbd>{keys}</kbd>
+              </dt>
+              <dd className="text-foreground">{what}</dd>
+            </React.Fragment>
+          ))}
+        </dl>
+        <p className="mt-3">Shortcuts pause while you type in the working pad, the calculator or a field.</p>
       </Modal>
     </div>
   );
 }
-

@@ -89,9 +89,12 @@ const config: Config = {
   },
   plugins: [
     plugin(({ addBase }) => {
+      // Light by default; dark when the system asks for it, unless the viewer chose light;
+      // and always dark when the viewer chose dark (data-theme set by the theme toggle).
       addBase({
-        ":root": cssVariables("light"),
-        "@media (prefers-color-scheme: dark)": { ":root": cssVariables("dark") },
+        ":root": { ...cssVariables("light"), colorScheme: "light" },
+        "@media (prefers-color-scheme: dark)": { ':root:not([data-theme="light"])': { ...cssVariables("dark"), colorScheme: "dark" } },
+        ':root[data-theme="dark"]': { ...cssVariables("dark"), colorScheme: "dark" },
       });
     }),
   ],

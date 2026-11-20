@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpenCheck, FlaskConical, LayoutDashboard, Sigma, type LucideIcon } from "lucide-react";
+import { BookOpenCheck, FlaskConical, House, Sigma, TrendingUp, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,8 @@ interface NavLink {
 }
 
 const LINKS: readonly NavLink[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, match: (p) => p === "/" || p.startsWith("/session") },
+  { href: "/", label: "Home", icon: House, match: (p) => p === "/" || (p.startsWith("/session") && !p.endsWith("/report")) },
+  { href: "/progress", label: "Progress", icon: TrendingUp, match: (p) => p.startsWith("/progress") || p.endsWith("/report") },
   { href: "/study", label: "Study", icon: BookOpenCheck, match: (p) => p.startsWith("/study") },
   { href: "/formulas", label: "Formulas", icon: Sigma, match: (p) => p.startsWith("/formulas") },
   { href: "/lab", label: "Visual lab", icon: FlaskConical, match: (p) => p.startsWith("/lab") },

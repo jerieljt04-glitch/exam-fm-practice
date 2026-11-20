@@ -45,7 +45,7 @@ export function ChainView({ chain, integration, options, selectedKey }: { chain:
           const next = consumers(step.output.symbol, idx);
           return (
             <li key={idx} className="relative pl-8">
-              <span className={cn("absolute left-0 top-3 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold", yours ? "bg-destructive text-white" : "bg-primary/10 text-primary")}>{idx + 1}</span>
+              <span className={cn("absolute left-0 top-3 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold", yours ? "bg-destructive text-white" : "bg-primary-container text-primary-on-container")}>{idx + 1}</span>
               {idx < chain.steps.length - 1 && <span className="absolute left-[11px] top-9 h-[calc(100%-1.5rem)] w-0.5 bg-border" aria-hidden />}
               <div className={cn("mb-2 rounded-lg border p-3", yours && "border-destructive")}>
                 <div className="flex flex-wrap items-center gap-2">

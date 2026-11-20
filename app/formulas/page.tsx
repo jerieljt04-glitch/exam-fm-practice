@@ -49,7 +49,7 @@ export default async function FormulasPage() {
               <ol className="space-y-1">
                 {chain.steps.map((step, idx) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">{idx + 1}</span>
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-container text-[10px] font-semibold text-primary-on-container">{idx + 1}</span>
                     <span>
                       {step.label}
                       {step.formula && (

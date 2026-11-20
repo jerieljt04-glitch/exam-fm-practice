@@ -9,6 +9,7 @@ import { DRILL_BY_ID } from "../study/drill";
 import { NEW_CARD, cardStage, nextSchedule, type CardSchedule, type CardStage, type Rating } from "../study/schedule";
 import { TOPIC_ORDER, type TopicId } from "../syllabus";
 import { prisma } from "./db";
+import { NotFoundError } from "./errors";
 
 export type StudyKind = "FLASHCARD" | "QUICK_CHECK" | "DRILL" | "CONCEPT_QUESTION";
 export const STUDY_KINDS: StudyKind[] = ["FLASHCARD", "QUICK_CHECK", "DRILL", "CONCEPT_QUESTION"];
@@ -51,7 +52,7 @@ export async function recordStudyAttempt(a: { kind: StudyKind; itemId: string; t
 /** Applies a rating to a flashcard and stores its next schedule. */
 export async function reviewCard(cardId: string, rating: Rating, now: Date = new Date()): Promise<CardSchedule> {
   const card = STUDY_CARD_BY_ID[cardId];
-  if (!card) throw new Error(`Unknown card ${cardId}.`);
+  if (!card) throw new NotFoundError(`Unknown card ${cardId}.`);
   const existing = await prisma.studyCard.findUnique({ where: { id: cardId } });
   const next = nextSchedule(existing ?? NEW_CARD, rating, now);
   const data = { deck: card.deck, ease: next.ease, intervalDays: next.intervalDays, reps: next.reps, lapses: next.lapses, dueAt: next.dueAt, lastRating: rating, lastReviewedAt: now };

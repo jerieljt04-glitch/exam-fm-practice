@@ -99,7 +99,7 @@ export function ConceptChainView({ concept, options, selectedKey, statementCount
           return (
             <li key={idx} className="relative pl-8">
               <span
-                className={cn("absolute left-0 top-3 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold", yours ? "bg-destructive text-white" : "bg-primary/10 text-primary")}
+                className={cn("absolute left-0 top-3 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold", yours ? "bg-destructive text-white" : "bg-primary-container text-primary-on-container")}
                 aria-hidden
               >
                 {idx + 1}

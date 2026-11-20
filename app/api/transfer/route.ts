@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server";
 
+import { error, fromError, parseBody } from "@/lib/api/http";
+import { TransferBody } from "@/lib/api/schemas";
 import { createTransferSession } from "@/lib/server/repository";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as { questionId?: string };
-  const id = body.questionId ? await createTransferSession(body.questionId) : null;
-  if (!id) return NextResponse.json({ error: "Question not found." }, { status: 404 });
-  return NextResponse.json({ id });
+  const parsed = await parseBody(request, TransferBody);
+  if (!parsed.ok) return parsed.response;
+  try {
+    const id = await createTransferSession(parsed.data.questionId);
+    if (!id) return error(404, "Question not found.");
+    return NextResponse.json({ id }, { status: 201 });
+  } catch (e) {
+    return fromError(e);
+  }
 }

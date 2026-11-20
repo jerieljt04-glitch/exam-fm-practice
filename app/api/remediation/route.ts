@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 
+import { error, fromError } from "@/lib/api/http";
 import { createRemediationSession } from "@/lib/server/repository";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const id = await createRemediationSession();
-  if (!id) return NextResponse.json({ error: "Nothing is due for remediation." }, { status: 409 });
-  return NextResponse.json({ id });
+  try {
+    const id = await createRemediationSession();
+    if (!id) return error(409, "Nothing is due for remediation.");
+    return NextResponse.json({ id }, { status: 201 });
+  } catch (e) {
+    return fromError(e);
+  }
 }

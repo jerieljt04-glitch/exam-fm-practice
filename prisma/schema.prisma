@@ -122,3 +122,12 @@ model StudyAttempt {
   @@index([kind])
   @@index([itemId])
 }
+
+/// Stored summary figures (e.g. the dashboard analytics), keyed by name and
+/// valid while `version` matches the history it was computed from.
+model Snapshot {
+  key       String   @id
+  version   String
+  data      String // JSON
+  updatedAt DateTime @updatedAt
+}

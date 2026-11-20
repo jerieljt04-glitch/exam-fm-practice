@@ -7,7 +7,7 @@ import { Badge, Button, Meter } from "@/components/ui";
 import { FORMULA_BY_ID } from "@/lib/formulas/registry";
 import { AREA_LABELS, type FormulaArea } from "@/lib/formulas/types";
 import { DRILL_BY_ID, DRILL_ITEMS, type DrillItem } from "@/lib/study/drill";
-import { cn } from "@/lib/utils";
+import { cn, shuffle } from "@/lib/utils";
 
 const AREAS = [...new Set(DRILL_ITEMS.map((d) => d.area))] as FormulaArea[];
 const KEYS = ["A", "B", "C", "D"] as const;
@@ -18,7 +18,6 @@ interface Shown {
   order: number[];
 }
 
-const shuffle = <T,>(xs: T[]): T[] => [...xs].sort(() => Math.random() - 0.5);
 
 async function record(item: DrillItem, correct: boolean, chosen: string) {
   await fetch("/api/study/attempt", {

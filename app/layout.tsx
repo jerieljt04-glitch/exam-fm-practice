@@ -14,6 +14,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 
 import { NavBar } from "@/components/NavBar";
+import { THEME_BOOT_SCRIPT, ThemeToggle } from "@/components/ThemeToggle";
 
 export const metadata: Metadata = {
   title: "Exam FM Practice",
@@ -28,7 +29,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body className="min-h-screen antialiased">
         <header className="sticky top-0 z-40 bg-background/90 shadow-[0_1px_0_0_hsl(var(--border))] backdrop-blur supports-[backdrop-filter]:bg-background/75">
           <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
@@ -41,7 +45,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <span className="hidden text-xs text-muted-foreground sm:inline">Diagnostic &amp; challenge simulator</span>
               </span>
             </Link>
-            <NavBar />
+            <div className="flex items-center gap-1">
+              <NavBar />
+              <ThemeToggle />
+            </div>
           </div>
         </header>
         {children}
