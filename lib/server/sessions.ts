@@ -314,7 +314,23 @@ export async function saveProgress(id: string, patch: ProgressPatch): Promise<{ 
 
 // ---------------------------------------------------------------- submission
 
-export async function submitSession(id: string): Promise<void> {
+/** Submissions in flight, by session: concurrent submits of one session share a single run. */
+const inFlight = new Map<string, Promise<void>>();
+
+/**
+ * Submits a session exactly once. Repeated or concurrent calls (timer expiry
+ * racing the button, a retried request) share the run already in progress,
+ * and the status change is also claimed atomically in the database.
+ */
+export function submitSession(id: string): Promise<void> {
+  const running = inFlight.get(id);
+  if (running) return running;
+  const run = submitOnce(id).finally(() => inFlight.delete(id));
+  inFlight.set(id, run);
+  return run;
+}
+
+async function submitOnce(id: string): Promise<void> {
   const session = await prisma.session.findUnique({ where: { id }, include: { questions: true } });
   if (!session) throw new NotFoundError("Session not found.");
   if (session.status === "SUBMITTED") return;
