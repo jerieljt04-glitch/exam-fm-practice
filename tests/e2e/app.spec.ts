@@ -88,7 +88,7 @@ for (const scheme of ["light", "dark"] as const) {
       const name = `${scheme}${path === "/" ? "-home" : path.replace(/\//g, "-")}.png`;
       // In CI, a platform without recorded baselines attaches the screenshot instead of failing;
       // the "Update visual baselines" workflow records and commits them.
-      if (process.env.CI && !existsSync(test.info().snapshotPath(name))) {
+      if (process.env.CI && test.info().config.updateSnapshots !== "all" && !existsSync(test.info().snapshotPath(name))) {
         await test.info().attach(`new baseline ${name}`, { body: await page.screenshot(), contentType: "image/png" });
         continue;
       }
