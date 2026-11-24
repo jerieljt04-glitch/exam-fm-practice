@@ -53,7 +53,7 @@ export const TransferBody = z.object({ questionId: z.string().min(1).max(100) })
 
 export const StudyAttemptBody = z
   .object({
-    kind: z.enum(["QUICK_CHECK", "DRILL", "CONCEPT_QUESTION"]),
+    kind: z.enum(["QUICK_CHECK", "DRILL", "CONCEPT_QUESTION", "STRATEGY"]),
     itemId: z.string().min(1).max(200),
     topic,
     correct: z.boolean(),

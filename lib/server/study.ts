@@ -11,8 +11,8 @@ import { TOPIC_ORDER, type TopicId } from "../syllabus";
 import { prisma } from "./db";
 import { NotFoundError } from "./errors";
 
-export type StudyKind = "FLASHCARD" | "QUICK_CHECK" | "DRILL" | "CONCEPT_QUESTION";
-export const STUDY_KINDS: StudyKind[] = ["FLASHCARD", "QUICK_CHECK", "DRILL", "CONCEPT_QUESTION"];
+export type StudyKind = "FLASHCARD" | "QUICK_CHECK" | "DRILL" | "CONCEPT_QUESTION" | "STRATEGY";
+export const STUDY_KINDS: StudyKind[] = ["FLASHCARD", "QUICK_CHECK", "DRILL", "CONCEPT_QUESTION", "STRATEGY"];
 
 /** Cards falling due within this window count as due now (a relearning step is ten minutes). */
 export const LEARN_AHEAD_MS = 20 * 60_000;
@@ -73,6 +73,8 @@ export interface StudyOverview {
   quickChecks: Tally & { byTopic: Record<TopicId, Tally>; missed: string[] };
   drill: Tally & { byTopic: Record<TopicId, Tally>; missed: string[]; troubleFormulas: Array<{ formula: string; misses: number }> };
   conceptQuestions: Tally & { byTopic: Record<TopicId, Tally> };
+  /** Solution-strategy questions (practice and mock). */
+  strategy: Tally & { byTopic: Record<TopicId, Tally>; missed: string[] };
   reviewsLast7Days: number;
   /** Consecutive days, ending today or yesterday, with any study activity. */
   streakDays: number;
@@ -134,6 +136,7 @@ export async function studyOverview(now: Date = new Date()): Promise<StudyOvervi
   const qc = tally("QUICK_CHECK");
   const dr = tally("DRILL");
   const cq = tally("CONCEPT_QUESTION");
+  const st = tally("STRATEGY");
 
   const misses = new Map<string, number>();
   for (const a of dr.list) {
@@ -164,6 +167,7 @@ export async function studyOverview(now: Date = new Date()): Promise<StudyOvervi
       troubleFormulas: [...misses].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([formula, n]) => ({ formula, misses: n })),
     },
     conceptQuestions: { attempts: cq.attempts, correct: cq.correct, byTopic: cq.byTopic },
+    strategy: { attempts: st.attempts, correct: st.correct, byTopic: st.byTopic, missed: st.missed },
     reviewsLast7Days: attempts.filter((a) => a.kind === "FLASHCARD" && a.at.getTime() >= weekAgo).length,
     streakDays,
   };

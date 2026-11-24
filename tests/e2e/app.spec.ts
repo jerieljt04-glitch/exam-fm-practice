@@ -105,7 +105,7 @@ test("contrast: every visible text element meets WCAG AA in both themes", async 
   await request.post(`/api/sessions/${doneId}/submit`, { data: {} });
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-    for (const path of [...STATIC_PAGES, "/progress?tab=history", "/formulas", `/session/${id}`, `/session/${doneId}/report`]) {
+    for (const path of [...STATIC_PAGES, "/progress?tab=history", "/formulas", "/study/drill", "/study/strategy", `/session/${id}`, `/session/${doneId}/report`]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(await contrastViolations(page), `${scheme} ${path}`).toEqual([]);
@@ -161,6 +161,32 @@ test("exam: shortcuts, calculator, review screen and the report", async ({ page,
   await page.getByRole("button", { name: "End exam and see the report" }).click();
   await page.waitForURL(/\/report/);
   await expect(page.getByRole("heading", { name: "Summary" })).toBeVisible();
+});
+
+test("strategy: practice gives feedback per question; a mock scores and reviews at the end", async ({ page }) => {
+  await page.goto("/study/strategy");
+  await page.getByRole("button", { name: /^Start practice/ }).click();
+  await expect(page.getByText(/Question 1 of 10/)).toBeVisible();
+  await page.keyboard.press("a");
+  await expect(page.getByText("Instinct", { exact: true })).toBeVisible();
+  await expect(page.getByText("Right plan.")).toBeVisible();
+  await page.getByRole("button", { name: "Next →" }).click();
+  await expect(page.getByText(/Question 2 of 10/)).toBeVisible();
+
+  await page.goto("/study/strategy");
+  await page.getByRole("radio", { name: /^Mock/ }).click();
+  await page.getByLabel("Number of questions").selectOption("5");
+  await page.getByRole("button", { name: /^Start mock \(5\)/ }).click();
+  await expect(page.getByText(/\d:\d\d left/)).toBeVisible();
+  await page.keyboard.press("b");
+  await expect(page.getByRole("radio", { name: "Option B" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByText("Right plan.")).toHaveCount(0);
+  page.once("dialog", (d) => void d.accept());
+  await page.getByRole("button", { name: "Submit mock" }).click();
+  await expect(page.getByRole("heading", { name: /Mock results: \d \/ 5/ })).toBeVisible();
+  await expect(page.getByText("4 unanswered")).toBeVisible();
+  await page.getByRole("button", { name: /^1\./ }).click();
+  await expect(page.getByText("Right plan.")).toBeVisible();
 });
 
 test("api: invalid requests get a 400 with a reason, missing sessions a 404", async ({ request }) => {

@@ -5,6 +5,7 @@ import { FORMULA_BY_ID } from "@/lib/formulas/registry";
 import { studyOverview } from "@/lib/server/study";
 import { DRILL_ITEMS } from "@/lib/study/drill";
 import { QUICK_CHECKS } from "@/lib/study/quick-checks";
+import { STRATEGY_KIND_LABELS, STRATEGY_QUESTIONS } from "@/lib/study/strategy";
 import { STAGE_LABELS } from "@/lib/study/schedule";
 import { TOPIC_LABELS, TOPIC_ORDER } from "@/lib/syllabus";
 import { pct } from "@/lib/utils";
@@ -62,6 +63,25 @@ export default async function StudyHub() {
           <Badge>{o.reviewsLast7Days} card reviews in 7 days</Badge>
         </div>
       </div>
+
+      <section className="flex flex-col gap-4 rounded-card bg-card p-6 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-3xl space-y-1">
+          <h3 className="font-semibold">Solution strategy — practice and mock</h3>
+          <p className="text-sm text-muted-foreground">
+            {STRATEGY_QUESTIONS.length} exam-style problems where the choices are <i>plans</i>, not numbers: which formula to use, what to do first, how to set up the equation of
+            value, which trap to avoid ({Object.values(STRATEGY_KIND_LABELS).join(" · ").toLowerCase()}). Builds the instinct for the route before you calculate.
+          </p>
+          <div className="flex items-baseline gap-2">
+            <span className="stat">{pct(o.strategy.correct, o.strategy.attempts)}</span>
+            <span className="text-xs text-muted-foreground">
+              of {o.strategy.attempts} plans chosen correctly · {o.strategy.missed.length} to revisit
+            </span>
+          </div>
+        </div>
+        <Link href="/study/strategy" className="inline-flex h-9 shrink-0 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+          Practise strategy
+        </Link>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Tool href="/study/flashcards?deck=formulas" title="Formula flashcards" action={f.due ? `Review ${f.due} due` : "Learn new cards"}>
@@ -121,25 +141,26 @@ export default async function StudyHub() {
 
         <Panel title="By topic" className="lg:col-span-2">
           <div className="overflow-x-auto scrollbar-slim">
-            <table className="w-full min-w-[520px] text-left text-sm">
+            <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="text-xs text-muted-foreground">
                 <tr>
                   <th className="py-1">Topic</th>
-                  <th>Quick checks</th>
-                  <th>Formula drill</th>
-                  <th>Concept questions</th>
+                  <th className="pr-4">Quick checks</th>
+                  <th className="pr-4">Formula drill</th>
+                  <th className="pr-4">Concept questions</th>
+                  <th>Strategy</th>
                 </tr>
               </thead>
               <tbody>
                 {TOPIC_ORDER.map((t) => {
-                  const cells = [o.quickChecks.byTopic[t], o.drill.byTopic[t], o.conceptQuestions.byTopic[t]];
+                  const cells = [o.quickChecks.byTopic[t], o.drill.byTopic[t], o.conceptQuestions.byTopic[t], o.strategy.byTopic[t]];
                   return (
                     <tr key={t} className="border-t align-middle">
                       <td className="py-2 pr-2">{TOPIC_LABELS[t]}</td>
                       {cells.map((cell, idx) => (
                         <td key={idx} className="pr-4">
                           {cell.attempts ? (
-                            <div className="w-36 space-y-0.5">
+                            <div className="w-28 space-y-0.5">
                               <div className="text-xs tabular-nums">
                                 {pct(cell.correct, cell.attempts)} <span className="text-muted-foreground">({cell.correct}/{cell.attempts})</span>
                               </div>
@@ -208,6 +229,9 @@ export default async function StudyHub() {
             </li>
             <li>
               <b>A few concept questions</b> with feedback, reading the explanation for every wrong option, not just yours.
+            </li>
+            <li>
+              <b>Strategy practice</b> on the topic you are studying; once a week, a timed <Link href="/study/strategy" className="text-primary hover:underline">strategy mock</Link> across all topics.
             </li>
             <li>
               Every few days, a closed-book <Link href="/" className="text-primary hover:underline">Concept Practice or Formula practice session</Link> to measure what has stuck.

@@ -5,6 +5,7 @@ import { FORMULA_BY_ID, FORMULAS } from "../../lib/formulas/registry";
 import { STUDY_CARDS, filterCards } from "../../lib/study/cards";
 import { DRILL_ITEMS } from "../../lib/study/drill";
 import { QUICK_CHECKS } from "../../lib/study/quick-checks";
+import { STRATEGY_QUESTIONS } from "../../lib/study/strategy";
 import { NEW_CARD, cardStage, nextSchedule } from "../../lib/study/schedule";
 import { parseMarkup } from "../../lib/math/markup";
 import { recordStudyAttempt, reviewCard, studyOverview } from "../../lib/server/study";
@@ -73,7 +74,7 @@ test("flashcards: every formula has a recall and a recognise card, every concept
 test("formula drill: the correct form matches an independent computation and every near-miss differs", () => {
   const ids = DRILL_ITEMS.map((d) => d.id);
   expect(new Set(ids).size === ids.length, "duplicate drill id");
-  expect(DRILL_ITEMS.length >= 40, `drill bank too small: ${DRILL_ITEMS.length}`);
+  expect(DRILL_ITEMS.length >= 110, `drill bank too small: ${DRILL_ITEMS.length}`);
   for (const d of DRILL_ITEMS) {
     expect(Boolean(FORMULA_BY_ID[d.formula]), `${d.id}: unknown formula ${d.formula}`);
     const ref = d.reference(d.sample);
@@ -95,6 +96,52 @@ test("formula drill: the correct form matches an independent computation and eve
     for (const markup of [d.prompt, d.hook, ...d.wrong.map((w) => w.why ?? "")]) {
       const bad = markupTypesets(markup);
       expect(bad === null, `${d.id}: markup does not typeset: ${bad}`);
+    }
+  }
+});
+
+test("formula drill: every section of both sheets is drilled", () => {
+  for (const area of ["A", "B", "C", "D", "E", "F", "G"] as const) {
+    const n = DRILL_ITEMS.filter((d) => d.area === area).length;
+    expect(n >= (area === "C" ? 4 : 6), `section ${area}: only ${n} drill items`);
+  }
+  for (const d of DRILL_ITEMS) expect(TOPIC_ORDER.includes(d.topic), `${d.id}: unknown topic ${d.topic}`);
+});
+
+// ---------------------------------------------------------------- solution strategy
+
+test("solution strategy: right plans reach the independently computed answer, wrong plans do not, markup typesets", () => {
+  const ids = STRATEGY_QUESTIONS.map((q) => q.id);
+  expect(new Set(ids).size === ids.length, "duplicate strategy id");
+  expect(STRATEGY_QUESTIONS.length >= 40, `strategy bank too small: ${STRATEGY_QUESTIONS.length}`);
+  for (const topic of TOPIC_ORDER) expect(STRATEGY_QUESTIONS.filter((q) => q.topic === topic).length >= 6, `${topic}: fewer than 6 strategy questions`);
+  for (const kind of ["plan", "first-step", "setup", "trap"] as const) expect(STRATEGY_QUESTIONS.some((q) => q.kind === kind), `no ${kind} questions`);
+  expect(STRATEGY_QUESTIONS.filter((q) => q.result).length >= 35, "most strategy questions are checked numerically");
+  // No give-away by length: the right plan must not usually be the longest, nor have more steps than every wrong one.
+  const size = (o: { steps: string[] }) => o.steps.join(" ").length;
+  const longest = STRATEGY_QUESTIONS.filter((q) => size(q.correct) > Math.max(...q.wrong.map(size))).length;
+  const shortest = STRATEGY_QUESTIONS.filter((q) => size(q.correct) < Math.min(...q.wrong.map(size))).length;
+  expect(longest <= 0.35 * STRATEGY_QUESTIONS.length, `the right plan is the longest option in ${longest} questions`);
+  expect(shortest <= 0.35 * STRATEGY_QUESTIONS.length, `the right plan is the shortest option in ${shortest} questions`);
+  for (const q of STRATEGY_QUESTIONS) expect(q.correct.steps.length <= Math.max(...q.wrong.map((w) => w.steps.length)), `${q.id}: the right plan has more steps than every wrong plan`);
+  for (const q of STRATEGY_QUESTIONS) {
+    expect(q.formulas.length > 0 && q.formulas.every((f) => Boolean(FORMULA_BY_ID[f])), `${q.id}: unknown formula`);
+    expect(q.correct.steps.length > 0 && q.wrong.every((w) => w.steps.length > 0 && (w.why ?? "").length > 10), `${q.id}: empty plan or wrong plan without a reason`);
+    const texts = [q.correct, ...q.wrong].map((o) => o.steps.join("|"));
+    expect(new Set(texts).size === 4, `${q.id}: repeated option`);
+    for (const markup of [q.problem, q.insight, ...q.correct.steps, ...q.wrong.flatMap((w) => [...w.steps, w.why ?? ""])]) {
+      const bad = markupTypesets(markup);
+      expect(bad === null, `${q.id}: markup does not typeset: ${bad}`);
+    }
+    if (!q.result) continue;
+    const ref = q.result.reference();
+    const value = q.result.value();
+    expect(Number.isFinite(ref) && Number.isFinite(value), `${q.id}: non-finite answer`);
+    close(value, ref, `${q.id}: the right plan disagrees with the independent computation`, 1e-6);
+    for (const w of q.wrong) {
+      if (!w.value) continue;
+      const x = w.value();
+      expect(Number.isFinite(x) && Math.abs(x - ref) > 1e-4 * Math.max(1, Math.abs(ref)), `${q.id}: a wrong plan reaches the right answer (${w.steps[0]})`);
     }
   }
 });
@@ -132,12 +179,16 @@ test("study persistence: reviews schedule cards and attempts feed the overview",
   expect(again.reps === 0 && again.lapses === 1, "lapse stored");
   await recordStudyAttempt({ kind: "QUICK_CHECK", itemId: QUICK_CHECKS[0].id, topic: QUICK_CHECKS[0].topic, correct: false });
   await recordStudyAttempt({ kind: "DRILL", itemId: DRILL_ITEMS[0].id, topic: DRILL_ITEMS[0].topic, correct: true });
+  await recordStudyAttempt({ kind: "STRATEGY", itemId: STRATEGY_QUESTIONS[0].id, topic: STRATEGY_QUESTIONS[0].topic, correct: false, detail: "mock:unanswered" });
   const overview = await studyOverview(now);
   expect(overview.decks.formulas.reviewed === 1, "one formula card reviewed");
   expect(overview.decks.formulas.due >= 1, "a forgotten card counts as due (inside the learn-ahead window)");
   expect(overview.quickChecks.attempts === 1 && overview.quickChecks.correct === 0, "quick-check attempt counted");
   expect(overview.quickChecks.missed.includes(QUICK_CHECKS[0].id), "missed quick check listed for review");
   expect(overview.drill.attempts === 1 && overview.drill.correct === 1, "drill attempt counted");
+  expect(overview.strategy.attempts === 1 && overview.strategy.correct === 0, "strategy attempt counted");
+  expect(overview.strategy.missed.includes(STRATEGY_QUESTIONS[0].id), "missed strategy question listed for review");
+  expect(overview.strategy.byTopic[STRATEGY_QUESTIONS[0].topic].attempts === 1, "strategy attempt counted under its topic");
   let threw = false;
   try {
     await reviewCard("f:not-a-formula:recall", "good", now);

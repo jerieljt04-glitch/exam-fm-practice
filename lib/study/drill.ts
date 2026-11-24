@@ -15,6 +15,7 @@
 import { Ia, Da, adue, an, sdue, sn, v } from "../engine/finance";
 import type { FormulaArea } from "../formulas/types";
 import type { TopicId } from "../syllabus";
+import { EXTRA_DRILL_ITEMS } from "./drill-extra";
 
 type S = Record<string, number>;
 
@@ -136,7 +137,7 @@ const SDN = (n: string) => `\\ddot s_{\\overline{${n}|}}`;
 
 // ---------------------------------------------------------------- the bank
 
-export const DRILL_ITEMS: DrillItem[] = [
+const CORE_DRILL_ITEMS: DrillItem[] = [
   // ============================================================ A. Measurement of interest
   {
     id: "d-from-i",
@@ -971,5 +972,9 @@ export const DRILL_ITEMS: DrillItem[] = [
     },
   },
 ];
+
+/** The first bank (above) plus the second bank in drill-extra.ts, grouped by sheet section. */
+const AREA_ORDER = ["A", "B", "C", "D", "E", "F", "G", "M"];
+export const DRILL_ITEMS: DrillItem[] = [...CORE_DRILL_ITEMS, ...EXTRA_DRILL_ITEMS].sort((a, b) => AREA_ORDER.indexOf(a.area) - AREA_ORDER.indexOf(b.area));
 
 export const DRILL_BY_ID: Record<string, DrillItem> = Object.fromEntries(DRILL_ITEMS.map((d) => [d.id, d]));
