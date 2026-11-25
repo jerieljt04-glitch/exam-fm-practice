@@ -17,6 +17,8 @@ export interface CreateSessionInput {
   /** Concept Practice: focus and optional topic filter. */
   conceptFocus?: ConceptFocus;
   topic?: TopicId | null;
+  /** Templates the session must not use (hard-archetype drills exclude the session they drill). */
+  excludeTemplates?: string[];
 }
 
 export const MODE_DEFAULTS: Record<SessionMode, { count: number; difficulty: DifficultySetting; timed: boolean }> = {

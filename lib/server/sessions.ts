@@ -97,6 +97,7 @@ export async function createSession(input: CreateSessionInput): Promise<string> 
     recentApproaches: recency.approaches,
     recentTemplates: recency.templates,
     servedTemplates,
+    excludeTemplates: input.excludeTemplates ? new Set(input.excludeTemplates) : undefined,
   });
   if (!built.questions.length) {
     throw new Error(built.shortfall?.reason ?? "No validated questions could be generated for this session.");
@@ -405,6 +406,7 @@ export async function createHardDrill(sessionId: string): Promise<string> {
     return { ...(chosen ? { misconception: chosen } : {}), objective: a.instance.objective, avoidTemplates: [a.instance.templateId], minLevel: 3 as const };
   });
   const count = Math.max(6, Math.min(15, targets.length + 3));
-  return createSession({ mode: "CHALLENGE", count, difficulty: "hard", targets, timed: false });
+  const excludeTemplates = [...new Set(attempts.map((a) => a.instance.templateId))];
+  return createSession({ mode: "CHALLENGE", count, difficulty: "hard", targets, timed: false, excludeTemplates });
 }
 

@@ -120,6 +120,8 @@ export interface SessionPlan {
    * (scenario and route) not served before where the template has one.
    */
   servedTemplates?: ReadonlyMap<string, number>;
+  /** Templates that must not appear at all (a drill never reuses the session it drills). */
+  excludeTemplates?: ReadonlySet<string>;
 }
 
 export interface Shortfall {
@@ -333,6 +335,8 @@ export function buildSession(plan: SessionPlan): BuiltSession {
   const questions: QuestionInstance[] = [];
   const use: Usage = { templates: new Set(), variants: new Set(), families: new Map(), objectives: new Map(), formats: new Map(), concepts: new Map(), approaches: new Map() };
   const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) ?? 0) + 1);
+  // Excluded templates are treated as already used, so no selection path can pick them.
+  plan.excludeTemplates?.forEach((id) => use.templates.add(id));
   let shortfallReason: string | null = null;
 
   const record = (template: AnyTemplate, instance: QuestionInstance) => {
