@@ -28,7 +28,7 @@ export function approachOf(question: Pick<QuestionInstance, "templateId" | "chai
 }
 
 /** How strongly a session `k` sessions ago (0 = the most recent) still counts as "recent". */
-export const RECENCY_WEIGHTS = [1, 0.8, 0.6, 0.45, 0.3, 0.2] as const;
+export const RECENCY_WEIGHTS = [1, 0.85, 0.7, 0.58, 0.47, 0.38, 0.3, 0.22, 0.15, 0.1] as const;
 
 /**
  * Recency weights by approach and by template from a history of attempts in

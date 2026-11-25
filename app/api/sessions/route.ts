@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const id = await createSession({
       mode: body.mode,
       count: body.count,
-      difficulty: body.difficulty === "mixed" || body.difficulty === "hard" ? body.difficulty : (body.difficulty as 1 | 2 | 3 | undefined),
+      difficulty: body.difficulty === "mixed" || body.difficulty === "hard" || body.difficulty === "elite" ? body.difficulty : (body.difficulty as 1 | 2 | 3 | 4 | undefined),
       timed: body.timed,
       aiWording: Boolean(body.aiWording),
       reference: body.reference,

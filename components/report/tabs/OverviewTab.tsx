@@ -1,9 +1,12 @@
 "use client";
 
+import React, { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ListChecks, RotateCcw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Hourglass, ListChecks, RotateCcw, Target } from "lucide-react";
 
-import { Button, Meter, Panel } from "@/components/ui";
+import { Badge, Button, Meter, Panel } from "@/components/ui";
+import { MOCK_PROFILES, mockProfileOf } from "@/lib/engine/mock-profiles";
 import { formatClock } from "@/lib/timer";
 import { pct } from "@/lib/utils";
 
@@ -33,6 +36,7 @@ function Summary({ ctx }: { ctx: ReportContext }) {
         <h2 id="summary-title" className="micro">
           Summary
         </h2>
+        <ProfileChip difficulty={report.session.difficulty} mode={report.session.mode} />
         <div className="mt-2 font-display text-[56px] font-semibold leading-none tabular-nums">{o.percent}%</div>
         <div className="mt-1 text-sm text-muted-foreground">
           {o.correct} of {o.total} correct · {formatClock(o.averageSeconds)} average
@@ -70,6 +74,102 @@ function Summary({ ctx }: { ctx: ReportContext }) {
   );
 }
 
+/** The mock profile (Standard / Mixed / Hard / Elite) and its target level, for exam sittings. */
+function ProfileChip({ difficulty, mode }: { difficulty: string; mode: string }) {
+  const profile = mockProfileOf(difficulty);
+  if (!profile || (mode !== "EXAM" && mode !== "CHALLENGE")) return null;
+  const p = MOCK_PROFILES[profile];
+  return (
+    <div className="mt-2">
+      <Badge tone={profile === "ELITE_9" ? "bad" : profile === "HARD_7" ? "warn" : "info"}>
+        {p.label} mock · {p.target}
+      </Badge>
+    </div>
+  );
+}
+
+/** Trap and time-sink diagnostics, with a one-click drill on the hard questions that were missed. */
+function TrapsAndTimeSinks({ ctx }: { ctx: ReportContext }) {
+  const { report, openQuestion } = ctx;
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const drill = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sessions/${report.session.id}/drill`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not start the drill.");
+      router.push(`/session/${data.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+  const traps = report.misconceptions.slice(0, 5);
+  return (
+    <Panel
+      title="Traps and time sinks"
+      action={
+        report.hardMissed > 0 ? (
+          <Button variant="tonal" onClick={() => void drill()} disabled={busy}>
+            <Target size={16} aria-hidden /> {busy ? "Building drill…" : `Drill missed hard archetypes (${report.hardMissed})`}
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="grid gap-5 md:grid-cols-2">
+        <div>
+          <h3 className="micro mb-2">Traps you fell into</h3>
+          {traps.length ? (
+            <ul className="space-y-2 text-sm">
+              {traps.map((t) => (
+                <li key={t.id} className="flex items-start justify-between gap-3">
+                  <span>
+                    {t.label}
+                    <span className="block text-xs text-muted-foreground">{t.category}</span>
+                  </span>
+                  <PositionList positions={t.positions} onOpen={openQuestion} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No modelled trap was chosen.</p>
+          )}
+        </div>
+        <div>
+          <h3 className="micro mb-2 flex items-center gap-1">
+            <Hourglass size={14} aria-hidden /> Over 7 minutes
+          </h3>
+          {report.timeSinks.length ? (
+            <ul className="space-y-1 text-sm">
+              {report.timeSinks.map((q) => (
+                <li key={q.position} className="flex items-center justify-between gap-2">
+                  <button className="underline-offset-2 hover:underline" onClick={() => openQuestion(q.position)}>
+                    Question {q.position}
+                  </button>
+                  <span className="flex items-center gap-2">
+                    <Badge tone={q.correct ? "good" : "bad"}>{q.correct ? "right" : "wrong"}</Badge>
+                    <span className="tabular-nums">{formatClock(q.seconds)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No question took longer than 7:00.</p>
+          )}
+        </div>
+      </div>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
 export function OverviewTab({ ctx }: { ctx: ReportContext }) {
   const { report, openQuestion } = ctx;
   const o = report.overall;
@@ -77,14 +177,16 @@ export function OverviewTab({ ctx }: { ctx: ReportContext }) {
     <div className="space-y-4">
       <Summary ctx={ctx} />
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Accuracy by difficulty (kept separate)">
+        <Panel title="Accuracy and pace by difficulty (kept separate)">
           <div className="space-y-3">
-            {report.byDifficulty.map((d) => (
+            {report.byDifficulty.filter((d) => d.total > 0).map((d) => (
               <div key={d.level}>
                 <div className="flex justify-between text-sm">
-                  <span>{d.label}</span>
+                  <span>
+                    Level {d.level} · {d.label}
+                  </span>
                   <span className="tabular-nums">
-                    {d.correct}/{d.total} · {pct(d.correct, d.total)}
+                    {d.correct}/{d.total} · {pct(d.correct, d.total)} · {formatClock(d.averageSeconds)} avg
                   </span>
                 </div>
                 <Meter value={d.total ? d.correct / d.total : null} tone={toneFor(d.total ? d.correct / d.total : null)} />
@@ -143,6 +245,7 @@ export function OverviewTab({ ctx }: { ctx: ReportContext }) {
           )}
         </Panel>
       </div>
+      <TrapsAndTimeSinks ctx={ctx} />
       <Panel title="How to read this report">
         <ul className="list-disc space-y-1 pl-5 text-sm">
           {report.notes.map((n) => (

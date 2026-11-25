@@ -24,8 +24,18 @@ export const BUCKET_LABELS: Record<IntegrationBucket, string> = {
   multi: "Three or more formulas",
   reconstruct: "Reconstruction, derivation or algebraic reasoning",
 };
-/** A fixed level, "mixed" (mostly SOA standard) or "hard" (Advanced and Challenge only, weighted to Challenge). */
-export type DifficultySetting = Difficulty | "mixed" | "hard";
+/**
+ * A fixed level, "mixed" (mostly SOA standard), "hard" (Challenge and Elite,
+ * half each: target EL 6.5–8) or "elite" (every calculation at Elite level,
+ * plus at most a few of the hardest Challenge concept traps: target EL 8.5–10).
+ */
+export type DifficultySetting = Difficulty | "mixed" | "hard" | "elite";
+
+export { MOCK_PROFILES, mockProfileOf, type MockProfile } from "./mock-profiles";
+
+/** Elite mocks: at least this many reasoning steps on every calculation, and at most this many non-Elite items. */
+export const MIN_ELITE_STEPS = 4;
+export const ELITE_MAX_CHALLENGE_ITEMS = 4;
 
 /** Concept Practice focus filters. */
 export type ConceptFocus = "mixed" | "definitions" | "equations" | "statements" | "errors";
@@ -64,6 +74,8 @@ export interface Target {
   conceptual?: boolean;
   avoidFamilies?: string[];
   avoidFormats?: string[];
+  /** Hard-archetype drills: draw from this level or above whenever such a template exists. */
+  minLevel?: Difficulty;
 }
 
 export interface SessionPlan {
@@ -100,6 +112,14 @@ export interface SessionPlan {
   recentApproaches?: ReadonlyMap<string, number>;
   /** Templates used in recent sessions, weighted 0–1 by recency (overrides the flat `recent` penalty). */
   recentTemplates?: ReadonlyMap<string, number>;
+  /**
+   * How many earlier sessions served each template, over the whole history.
+   * Unseen templates are always preferred; among seen ones the least used and
+   * least recent come first, so a new mock repeats a template only when the
+   * bank at that level has nothing unseen left — and then with a case
+   * (scenario and route) not served before where the template has one.
+   */
+  servedTemplates?: ReadonlyMap<string, number>;
 }
 
 export interface Shortfall {
@@ -120,8 +140,10 @@ export interface BuiltSession {
 /** Mix of levels used when the difficulty is "mixed": mostly exam standard, with advanced and challenge items. */
 const MIXED_LEVELS: Difficulty[] = [1, 1, 1, 1, 1, 2, 2, 2, 3, 3];
 const MIXED_CONCEPT_LEVELS: Difficulty[] = [1, 1, 2, 2, 3];
-/** Mix of levels for the "hard" setting: no SOA-standard items, three in five at Challenge level. */
-const HARD_LEVELS: Difficulty[] = [2, 2, 3, 3, 3];
+/** Mix of levels for the "hard" setting: no SOA-standard or Advanced items, half Challenge and half Elite. */
+const HARD_LEVELS: Difficulty[] = [3, 4];
+/** Elite sessions: share of typed (concept-trap) items, kept small so at least 26 of 30 items are Elite calculations. */
+const ELITE_STYLE: StyleMix = { min: 0, max: ELITE_MAX_CHALLENGE_ITEMS / 30, target: ELITE_MAX_CHALLENGE_ITEMS / 30 };
 
 /** Calculation items answer with one number; everything else counts toward the non-numerical share. */
 const isNumericTemplate = (t: AnyTemplate) => !isChoiceTemplate(t);
@@ -233,6 +255,7 @@ function proportional(total: number, weights: Record<TopicId, number>, order: To
 
 function levelFor(setting: DifficultySetting, rng: Rng, mixed: Difficulty[] = MIXED_LEVELS): Difficulty {
   if (setting === "hard") return rng.choice(HARD_LEVELS);
+  if (setting === "elite") return 4;
   return setting === "mixed" ? rng.choice(mixed) : setting;
 }
 
@@ -263,6 +286,9 @@ function score(template: AnyTemplate, level: Difficulty, plan: SessionPlan, use:
   if (plan.untestedObjectives?.has(template.objective)) value += 0.5;
   if (plan.recentTemplates) value -= (plan.recentTemplates.get(template.id) ?? 0) * 1.2;
   else if (plan.recent?.has(template.id)) value -= 0.7;
+  // Never-served templates come first: a template served in any earlier session drops a whole tier,
+  // so repeats only happen once the unseen part of the bank at this level is used up.
+  if (plan.servedTemplates?.has(template.id)) value -= 4 + Math.min(3, plan.servedTemplates.get(template.id)!) * 0.5;
   // Solution approaches: never repeat one inside a session while others exist, and lean
   // away from those the last few sessions used, so each exam asks for different reasoning.
   const approaches = [...approachesOf(template, level)];
@@ -273,6 +299,9 @@ function score(template: AnyTemplate, level: Difficulty, plan: SessionPlan, use:
       const seen = approaches.reduce((a, k) => a + (plan.recentApproaches!.get(k) ?? 0), 0) / approaches.length;
       value -= seen * 1.6;
     }
+    // A template with no route left that recent sessions have not used drops a further tier, so
+    // returning templates are the multi-case ones that can still ask for different steps.
+    if (plan.recentApproaches?.size && approaches.every((k) => plan.recentApproaches!.has(k))) value -= 2;
   }
   if (isChoiceTemplate(template) && template.practice === "concept") {
     const overlap = [...conceptsOf(template, level)].reduce((a, c) => a + (use.concepts.get(c) ?? 0), 0);
@@ -337,7 +366,8 @@ export function buildSession(plan: SessionPlan): BuiltSession {
     // A template can produce several solution approaches; when the draw lands on one already
     // used in this session or in the last session, try another draw before settling for it.
     let fallback: QuestionInstance | null = null;
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    const tries = plan.servedTemplates?.has(template.id) || plan.recentTemplates?.has(template.id) ? 10 : 4;
+    for (let attempt = 0; attempt < tries; attempt += 1) {
       const result = buildAny(template, level, `${plan.seed}|${questions.length}|${attempt}`, { prefer: opts.prefer, variant });
       rejected.push(...result.rejected);
       if (!result.instance) {
@@ -347,7 +377,7 @@ export function buildSession(plan: SessionPlan): BuiltSession {
       }
       if (opts.mustInclude && !result.instance.options.some((o) => o.misconceptionTag === opts.mustInclude)) continue;
       const approach = approachOf(result.instance);
-      const stale = use.approaches.has(approach) || (plan.recentApproaches?.get(approach) ?? 0) >= 1;
+      const stale = use.approaches.has(approach) || (plan.recentApproaches?.get(approach) ?? 0) > 0;
       if (!stale) {
         record(template, result.instance);
         return true;
@@ -370,11 +400,14 @@ export function buildSession(plan: SessionPlan): BuiltSession {
     const pool = target.conceptual ? (CONCEPT_TEMPLATES as AnyTemplate[]) : ALL_TEMPLATES.filter((t) => !isChoiceTemplate(t) || t.practice === "calculation");
     const eligible = (t: AnyTemplate) => !avoid.has(t.id) && !use.templates.has(t.id);
     let candidates: Array<{ template: AnyTemplate; level: Difficulty }> = [];
-    if (target.misconception) candidates = templatesTesting(target.misconception, pool).filter((c) => eligible(c.template));
+    // A hard-archetype target never falls back to easier templates.
+    const hardEnough = (c: { level: Difficulty }) => !target.minLevel || c.level >= target.minLevel;
+    if (target.misconception) candidates = templatesTesting(target.misconception, pool).filter((c) => eligible(c.template) && hardEnough(c));
     if (!candidates.length && target.objective) {
       candidates = pool
         .filter((t) => (t.objective === target.objective || t.secondary.includes(target.objective!)) && eligible(t))
-        .map((template) => ({ template, level: closestLevel(template, plan.difficulty === "mixed" ? 2 : plan.difficulty === "hard" ? 3 : plan.difficulty) }));
+        .map((template) => ({ template, level: closestLevel(template, target.minLevel ?? (plan.difficulty === "mixed" ? 2 : plan.difficulty === "hard" ? 3 : plan.difficulty === "elite" ? 4 : plan.difficulty)) }))
+        .filter(hardEnough);
     }
     // A conceptual retest must differ in kind, not just in numbers: prefer another concept family and item format.
     const different = (t: AnyTemplate) =>
@@ -456,8 +489,9 @@ export function buildSession(plan: SessionPlan): BuiltSession {
   // ------------------------------------------------ fill the rest by topic weighting and style mix
   const remaining = plan.count - questions.length;
   if (remaining > 0 && plan.mode !== "CONCEPT") {
-    const strict = typeof plan.difficulty === "number";
-    const mix = plan.styleMix === undefined ? STYLE_MIX[plan.mode] ?? null : plan.styleMix;
+    const strict = typeof plan.difficulty === "number" || plan.difficulty === "elite";
+    const elite = plan.difficulty === "elite";
+    const mix = plan.styleMix === undefined ? (elite ? ELITE_STYLE : STYLE_MIX[plan.mode] ?? null) : plan.styleMix;
     const order = rng.shuffle(TOPIC_ORDER);
     const counts = distributionFor(remaining, order);
     const typedTotal = mix ? nonNumericCount(remaining, mix) : 0;
@@ -465,13 +499,23 @@ export function buildSession(plan: SessionPlan): BuiltSession {
     const typedPool = ALL_TEMPLATES.filter(isChoiceTemplate);
     const numericPool = ALL_TEMPLATES.filter(isNumericTemplate);
 
+    let challengeTraps = 0;
     const fillOne = (topic: TopicId | null, wanted: Difficulty, typed: boolean): boolean => {
       const base = typed ? typedPool : numericPool;
+      // Elite mocks have no Elite typed items: their few typed slots take the hardest Challenge
+      // concept and statement traps instead (never more than ELITE_MAX_CHALLENGE_ITEMS).
+      const level: Difficulty = elite && typed ? 3 : wanted;
+      if (elite && typed && challengeTraps >= ELITE_MAX_CHALLENGE_ITEMS) return false;
       const candidates = base
-        .filter((t) => (topic === null || t.topic === topic) && !use.templates.has(t.id) && t.levels.includes(wanted))
-        .map((t) => ({ t, s: score(t, wanted, plan, use, rng) }))
+        .filter((t) => (topic === null || t.topic === topic) && !use.templates.has(t.id) && t.levels.includes(level))
+        .map((t) => ({ t, s: score(t, level, plan, use, rng) }))
         .sort((a, b) => b.s - a.s);
-      for (const { t } of candidates) if (take(t, wanted, { prefer: plan.prefer })) return true;
+      for (const { t } of candidates) {
+        if (take(t, level, { prefer: plan.prefer })) {
+          if (level !== wanted) challengeTraps += 1;
+          return true;
+        }
+      }
       return false;
     };
     const fillAnyLevel = (topic: TopicId, wanted: Difficulty): boolean => {

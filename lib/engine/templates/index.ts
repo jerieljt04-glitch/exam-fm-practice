@@ -17,6 +17,13 @@ import { INTEGRATED_TEMPLATES } from "./integrated";
 import { SINGLE_TEMPLATES } from "./single";
 import { LOAN_TEMPLATES } from "./loans";
 import { TVM_TEMPLATES } from "./tvm";
+import { ELITE_TVM_TEMPLATES } from "./elite-tvm";
+import { ELITE_ANNUITY_TEMPLATES } from "./elite-annuities";
+import { ELITE_LOAN_TEMPLATES } from "./elite-loans";
+import { ELITE_BOND_TEMPLATES } from "./elite-bonds";
+import { ELITE_ALM_TEMPLATES } from "./elite-alm";
+import { STANDARD_TVM_ANNUITY_TEMPLATES } from "./standard-tvm-annuities";
+import { STANDARD_LOAN_BOND_ALM_TEMPLATES } from "./standard-loans-bonds-alm";
 
 /** The numerical question bank: parameterised templates, each producing validated variations. */
 export const TEMPLATES: QuestionTemplate[] = [
@@ -38,6 +45,15 @@ export const TEMPLATES: QuestionTemplate[] = [
   ...CURVE_INFLATION_TEMPLATES,
   // Bond amortization families.
   ...AMORTIZATION_TEMPLATES,
+  // Elite (level 4): four to six chained stages, several cases per template.
+  ...ELITE_TVM_TEMPLATES,
+  ...ELITE_ANNUITY_TEMPLATES,
+  ...ELITE_LOAN_TEMPLATES,
+  ...ELITE_BOND_TEMPLATES,
+  ...ELITE_ALM_TEMPLATES,
+  // SOA-standard multi-case bank: a returning template asks for different steps.
+  ...STANDARD_TVM_ANNUITY_TEMPLATES,
+  ...STANDARD_LOAN_BOND_ALM_TEMPLATES,
 ];
 
 /** Typed-option templates: Concept Practice items and composite calculation items. */
@@ -58,6 +74,20 @@ export function templatesFor(topic: TopicId, level: Difficulty): QuestionTemplat
   return TEMPLATES.filter((template) => template.topic === topic && template.levels.includes(level));
 }
 
+/**
+ * Elite (level 4) coverage: every topic has at least as many distinct Elite
+ * calculation templates as the most questions an Elite mock can give it, so
+ * a 30-question Elite sitting never needs to repeat a template.
+ */
+export const ELITE_MINIMUMS: Record<TopicId, number> = { TVM: 4, ANNUITIES: 9, LOANS: 7, BONDS: 7, ALM: 9 };
+
+export function assertEliteCoverage(templates: readonly AnyTemplate[] = ALL_TEMPLATES): void {
+  for (const topic of TOPIC_ORDER) {
+    const count = templates.filter((t) => t.topic === topic && t.kind !== "choice" && t.levels.includes(4)).length;
+    if (count < ELITE_MINIMUMS[topic]) throw new Error(`${topic} has ${count} Elite templates; at least ${ELITE_MINIMUMS[topic]} are needed.`);
+  }
+}
+
 function assertBank(): void {
   const ids = new Set<string>();
   for (const template of ALL_TEMPLATES) {
@@ -74,3 +104,4 @@ function assertBank(): void {
 }
 
 assertBank();
+assertEliteCoverage();

@@ -39,6 +39,10 @@ export const RUBRIC = {
     steps: [3, 6] as const,
     summary: "Three to six reasoning steps, usually two or more connected formulas or concepts, and at least one non-obvious modelling or interpretation decision — all inside the syllabus.",
   },
+  4: {
+    steps: [4, 7] as const,
+    summary: "Four to seven chained stages, three or more connected formulas, at least two modelling decisions, and an inversion, several valuation dates or a reconstructed relationship — all inside the syllabus.",
+  },
 } satisfies Record<Difficulty, { steps: readonly [number, number]; summary: string }>;
 
 export interface CalibrationInput {
@@ -124,12 +128,17 @@ export function rubricCheck(
   const reasons: string[] = [];
   const [lo, hi] = RUBRIC[level].steps;
   if (m.reasoningSteps < lo) reasons.push(`${m.reasoningSteps} reasoning steps, below ${lo}`);
-  if (m.reasoningSteps > hi + (level === 3 ? 0 : 1)) reasons.push(`${m.reasoningSteps} reasoning steps, above ${hi}`);
+  if (m.reasoningSteps > hi + (level >= 3 ? 0 : 1)) reasons.push(`${m.reasoningSteps} reasoning steps, above ${hi}`);
   const feature = m.inverse || m.unfamiliar || m.multiConcept || m.multipleValuationDates || m.reconstruction || m.formulas + m.concepts >= 3;
   if (level === 2 && !feature) reasons.push("no inverse, unfamiliar, multi-date or connected-concept feature");
   if (level === 3) {
     if (m.formulas + m.concepts < 2) reasons.push("fewer than two connected formulas or concepts");
     if (!(m.modelingDecisions >= 1 || m.reconstruction || m.unfamiliar || m.inverse)) reasons.push("no non-obvious modelling or interpretation decision");
+  }
+  if (level === 4) {
+    if (m.formulas < 3) reasons.push("fewer than three connected formulas");
+    if (m.modelingDecisions < 2) reasons.push("fewer than two modelling decisions");
+    if (!(m.inverse || m.multipleValuationDates || m.reconstruction)) reasons.push("no inversion, second valuation date or reconstructed relationship");
   }
   return { level, meets: reasons.length === 0, reasons };
 }

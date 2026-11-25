@@ -1,7 +1,7 @@
 import { approachOf, recencyMaps } from "../../lib/engine/approach";
 import { buildQuestion } from "../../lib/engine/assemble";
-import { buildSession } from "../../lib/engine/session";
-import { TEMPLATE_BY_ID } from "../../lib/engine/templates";
+import { ELITE_MAX_CHALLENGE_ITEMS, MIN_ELITE_STEPS, buildSession, mockProfileOf } from "../../lib/engine/session";
+import { TEMPLATE_BY_ID, assertEliteCoverage } from "../../lib/engine/templates";
 import { toPublicQuestion, type QuestionInstance } from "../../lib/engine/types";
 import { classifyAttempt, containsValue, numbersIn, type AttemptRecord } from "../../lib/analysis/attempts";
 import { evaluateHypotheses, masteryStatus } from "../../lib/analysis/mastery";
@@ -50,6 +50,66 @@ test("exam simulation follows the 3/7/6/6/8 distribution with no repeated templa
     const topicsInOrder = questions.map((q) => q.topic).join();
     const sorted = [...questions].sort((a, b) => a.topic.localeCompare(b.topic)).map((q) => q.topic).join();
     expect(topicsInOrder !== sorted, `seed ${s}: questions grouped by topic`);
+  }
+});
+
+test("Elite mock: 30 questions, at least 26 Elite calculations of four or more steps, the rest Challenge traps, no repeated template or route", () => {
+  assertEliteCoverage();
+  for (let s = 0; s < 4; s += 1) {
+    const { questions, flagged, shortfall } = buildSession({ mode: "EXAM", count: 30, difficulty: "elite", seed: `elite-${s}` });
+    expect(questions.length === 30 && !shortfall, `seed ${s}: ${questions.length} questions (${shortfall?.reason ?? ""})`);
+    expect(flagged.length === 0, `seed ${s}: flagged templates ${flagged.join(", ")}`);
+    const elite = questions.filter((q) => q.difficulty === 4);
+    expect(elite.length >= 30 - ELITE_MAX_CHALLENGE_ITEMS, `seed ${s}: only ${elite.length} Elite questions`);
+    expect(questions.every((q) => q.difficulty === 4 || (q.difficulty === 3 && q.kind === "choice")), `seed ${s}: a non-Elite calculation slipped in`);
+    expect(elite.every((q) => (q.chain?.steps.length ?? 0) >= MIN_ELITE_STEPS), `seed ${s}: an Elite question has fewer than ${MIN_ELITE_STEPS} steps`);
+    expect(new Set(questions.map((q) => q.templateId)).size === 30, `seed ${s}: repeated template`);
+    const routes = questions.map(approachOf);
+    expect(new Set(routes).size === routes.length, `seed ${s}: repeated solution route`);
+    const counts: Record<string, number> = {};
+    questions.forEach((q) => (counts[q.topic] = (counts[q.topic] ?? 0) + 1));
+    for (const [topic, expected] of Object.entries(EXAM_DISTRIBUTION)) expect(counts[topic] === expected, `seed ${s}: ${topic} has ${counts[topic]}, expected ${expected}`);
+  }
+});
+
+test("Hard mock: Challenge and Elite only, roughly half each", () => {
+  const { questions } = buildSession({ mode: "EXAM", count: 30, difficulty: "hard", seed: "hard-mock" });
+  expect(questions.length === 30, `${questions.length} questions`);
+  expect(questions.every((q) => q.difficulty >= 3), "a standard or Advanced item in a Hard mock");
+  const elite = questions.filter((q) => q.difficulty === 4).length;
+  expect(elite >= 8 && elite <= 22, `${elite} Elite items in a Hard mock`);
+  expect(mockProfileOf("elite") === "ELITE_9" && mockProfileOf("hard") === "HARD_7" && mockProfileOf(1) === "STANDARD", "mock profiles map to difficulty settings");
+});
+
+test("repeat mocks: unseen templates first; a template that returns comes back as a different case", () => {
+  for (const difficulty of [1, "hard", "elite"] as const) {
+    const mocks = difficulty === 1 ? 4 : 3;
+    const history: { sessionId: string; instance: QuestionInstance }[] = [];
+    const served = new Map<string, number>();
+    let firstTwoOverlap = 0;
+    let returnedSameRoute = 0;
+    let returned = 0;
+    let freshFirstThree = 0;
+    for (let s = 0; s < mocks; s += 1) {
+      const recency = recencyMaps(history);
+      const { questions } = buildSession({ mode: "EXAM", count: 30, difficulty, seed: `repeat-${difficulty}-${s}`, recentApproaches: recency.approaches, recentTemplates: recency.templates, servedTemplates: served });
+      const seenRoutes = new Set(history.map((h) => approachOf(h.instance)));
+      for (const q of questions) {
+        if (served.has(q.templateId)) {
+          returned += 1;
+          if (seenRoutes.has(approachOf(q))) returnedSameRoute += 1;
+          if (s === 1) firstTwoOverlap += 1;
+          if (s <= 2) freshFirstThree += 1;
+        }
+      }
+      questions.forEach((q) => {
+        history.push({ sessionId: `R${s}`, instance: q });
+        served.set(q.templateId, (served.get(q.templateId) ?? 0) + 1);
+      });
+    }
+    expect(firstTwoOverlap === 0 || difficulty !== 1, `standard: the second mock reused ${firstTwoOverlap} templates while unseen ones existed`);
+    if (difficulty === 1) expect(freshFirstThree === 0, `standard: ${freshFirstThree} templates returned within the first three mocks`);
+    expect(returned === 0 || returnedSameRoute / returned <= 0.35, `${difficulty}: ${returnedSameRoute} of ${returned} returning templates repeated a route already seen`);
   }
 });
 

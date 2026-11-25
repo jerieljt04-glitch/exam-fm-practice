@@ -16,8 +16,8 @@ import {
   type SessionMode,
   type Target,
 } from "../engine/session";
-import { recencyMaps } from "../engine/approach";
-import { answerTypeOfInstance, itemFormatOf, practiceOf, toPublicQuestion, type PublicQuestion, type QuestionInstance } from "../engine/types";
+import { RECENCY_WEIGHTS, recencyMaps } from "../engine/approach";
+import { answerTypeOfInstance, itemFormatOf, practiceOf, toPublicQuestion, type Difficulty, type PublicQuestion, type QuestionInstance } from "../engine/types";
 import { CONFIDENCE_LEVELS, METHODS, type Confidence, type ReasoningSkill } from "../engine/skills";
 import { PROFILE_FOCUS_MISCONCEPTIONS } from "../profile";
 import { applySession, remediationTargets } from "../analysis/remediation";
@@ -26,8 +26,8 @@ import { acceptElapsed, isExpired } from "../timer";
 import { prisma } from "./db";
 import { MODE_DEFAULTS, MODE_LABELS, type CreateSessionInput, type ReferenceMode } from "./config";
 import { getAnalytics } from "./dashboard";
-import { NotFoundError } from "./errors";
-import { attemptsForSession, loadRemediationItems, recentlyServed } from "./history";
+import { NotFoundError, ValidationError } from "./errors";
+import { attemptsForSession, loadRemediationItems, recentlyServed, servedTemplateCounts } from "./history";
 
 // ---------------------------------------------------------------- configuration
 
@@ -37,10 +37,9 @@ export { MODE_DEFAULTS, MODE_LABELS, REFERENCE_LABELS, type CreateSessionInput, 
 const SECONDS_PER_QUESTION = (EXAM_STRUCTURE.durationMinutes * 60) / EXAM_STRUCTURE.questionCount;
 
 function parseDifficulty(value: unknown, fallback: DifficultySetting): DifficultySetting {
-  if (value === "mixed") return "mixed";
-  if (value === "hard") return "hard";
+  if (value === "mixed" || value === "hard" || value === "elite") return value;
   const n = Number(value);
-  return n === 1 || n === 2 || n === 3 ? (n as 1 | 2 | 3) : fallback;
+  return n === 1 || n === 2 || n === 3 || n === 4 ? (n as Difficulty) : fallback;
 }
 
 // ---------------------------------------------------------------- creation
@@ -73,9 +72,11 @@ export async function createSession(input: CreateSessionInput): Promise<string> 
     recent.add(instance.templateId);
     if (instance.kind === "choice") recent.add(`${instance.templateId}|${instance.variant}`);
   });
-  // Solution approaches and templates from the last six sessions served — submitted or not, so an
-  // abandoned attempt still counts as seen — weighted by recency.
-  const recency = recencyMaps(await recentlyServed(6));
+  // Solution approaches and templates from the last ten sessions served — submitted or not, so an
+  // abandoned attempt still counts as seen — weighted by recency; and every template ever served,
+  // so unseen questions are always used before any earlier one returns.
+  const recency = recencyMaps(await recentlyServed(RECENCY_WEIGHTS.length));
+  const servedTemplates = await servedTemplateCounts();
   const conceptFocus: ConceptFocus | undefined = input.mode === "CONCEPT" ? (input.conceptFocus && input.conceptFocus in CONCEPT_FOCUS_LABELS ? input.conceptFocus : "mixed") : undefined;
   const topic = input.mode === "CONCEPT" && input.topic && TOPIC_ORDER.includes(input.topic) ? input.topic : null;
 
@@ -95,6 +96,7 @@ export async function createSession(input: CreateSessionInput): Promise<string> 
     recent,
     recentApproaches: recency.approaches,
     recentTemplates: recency.templates,
+    servedTemplates,
   });
   if (!built.questions.length) {
     throw new Error(built.shortfall?.reason ?? "No validated questions could be generated for this session.");
@@ -383,5 +385,26 @@ async function submitOnce(id: string): Promise<void> {
           })
     )
   );
+}
+
+// ---------------------------------------------------------------- hard-archetype drill
+
+/**
+ * A drill built from a submitted session's missed Challenge and Elite
+ * questions: each trap that caught the candidate is set again in a different
+ * template at Challenge level or above, topped up with other hard questions.
+ */
+export async function createHardDrill(sessionId: string): Promise<string> {
+  const attempts = await attemptsForSession(sessionId);
+  if (!attempts.length) throw new NotFoundError("Session not found.");
+  const missed = attempts.filter((a) => a.instance.difficulty >= 3 && !a.isCorrect);
+  if (!missed.length) throw new ValidationError("There are no missed Challenge or Elite questions in this session to drill.");
+  const targets: Target[] = missed.slice(0, 12).map((a) => {
+    const chosen = a.instance.options.find((o) => o.key === a.selectedKey && !o.isCorrect)?.misconceptionTag;
+    // The trap chosen, retested in another hard template; failing that, the same learning outcome at a hard level.
+    return { ...(chosen ? { misconception: chosen } : {}), objective: a.instance.objective, avoidTemplates: [a.instance.templateId], minLevel: 3 as const };
+  });
+  const count = Math.max(6, Math.min(15, targets.length + 3));
+  return createSession({ mode: "CHALLENGE", count, difficulty: "hard", targets, timed: false });
 }
 

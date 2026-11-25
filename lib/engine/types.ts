@@ -9,13 +9,18 @@ import type { ReasoningSkill } from "./skills";
  * 2 — Advanced: connected concepts, inverse problems, unusual timing.
  * 3 — Challenge: deliberately harder reasoning than the examination, still
  *     inside the syllabus.
+ * 4 — Elite: four to six chained stages (several regimes, valuation dates or
+ *     an inversion), every one inside the syllabus. Used by the Elite mock.
  */
-export type Difficulty = 1 | 2 | 3;
+export type Difficulty = 1 | 2 | 3 | 4;
+
+export const DIFFICULTY_LEVELS: readonly Difficulty[] = [1, 2, 3, 4];
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   1: "SOA standard",
   2: "Advanced",
   3: "Challenge",
+  4: "Elite",
 };
 
 export type AnswerFormat =

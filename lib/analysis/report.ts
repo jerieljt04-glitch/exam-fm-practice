@@ -6,6 +6,7 @@ import {
   CONCEPT_FAILURE_LABELS,
   CONCEPT_FAILURES,
   DIFFICULTY_LABELS,
+  DIFFICULTY_LEVELS,
   INTEGRATION_LABELS,
   ITEM_FORMAT_LABELS,
   answerTypeOfInstance,
@@ -71,7 +72,11 @@ export interface DiagnosticReport {
     averageSeconds: number;
     longQuestions: { position: number; seconds: number }[];
   };
-  byDifficulty: { level: Difficulty; label: string; total: number; correct: number }[];
+  byDifficulty: { level: Difficulty; label: string; total: number; correct: number; averageSeconds: number }[];
+  /** Questions past the time-sink line (7 minutes: well beyond the 5-minute exam pace). */
+  timeSinks: { position: number; seconds: number; correct: boolean; level: Difficulty }[];
+  /** Missed Challenge and Elite questions: what a hard-archetype drill would retest. */
+  hardMissed: number;
   byTopic: { topic: TopicId; label: string; total: number; correct: number }[];
   reasoning: SkillScore[];
   misconceptions: { id: string; label: string; category: string; count: number; positions: number[]; principle: string; recognition: string }[];
@@ -128,6 +133,9 @@ function median(values: number[]): number {
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
+
+/** A question taking longer than this is a time sink (the exam pace is five minutes a question). */
+export const TIME_SINK_SECONDS = 7 * 60;
 
 export function buildReport(meta: SessionMeta, attempts: readonly AttemptRecord[]): DiagnosticReport {
   const ordered = [...attempts].sort((a, b) => a.position - b.position);
@@ -207,10 +215,16 @@ export function buildReport(meta: SessionMeta, attempts: readonly AttemptRecord[
         .filter((q) => q.seconds > threshold)
         .sort((a, b) => b.seconds - a.seconds),
     },
-    byDifficulty: ([1, 2, 3] as Difficulty[]).map((level) => {
+    byDifficulty: DIFFICULTY_LEVELS.map((level) => {
       const rows = ordered.map((a, idx) => ({ a, e: evidence[idx] })).filter(({ a }) => a.instance.difficulty === level);
-      return { level, label: DIFFICULTY_LABELS[level], total: rows.length, correct: rows.filter(({ e }) => e.correct).length };
+      const seconds = rows.map(({ a }) => a.timeSpentSeconds);
+      return { level, label: DIFFICULTY_LABELS[level], total: rows.length, correct: rows.filter(({ e }) => e.correct).length, averageSeconds: seconds.length ? Math.round(seconds.reduce((x, y) => x + y, 0) / seconds.length) : 0 };
     }),
+    timeSinks: ordered
+      .map((a, idx) => ({ position: positionOf(idx), seconds: a.timeSpentSeconds, correct: evidence[idx].correct, level: a.instance.difficulty }))
+      .filter((q) => q.seconds > TIME_SINK_SECONDS)
+      .sort((a, b) => b.seconds - a.seconds),
+    hardMissed: ordered.filter((a, idx) => a.instance.difficulty >= 3 && !evidence[idx].correct).length,
     byTopic: TOPIC_ORDER.map((topic) => {
       const rows = ordered.map((a, idx) => ({ a, e: evidence[idx] })).filter(({ a }) => a.instance.topic === topic);
       return { topic, label: TOPIC_LABELS[topic], total: rows.length, correct: rows.filter(({ e }) => e.correct).length };

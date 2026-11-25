@@ -16,7 +16,7 @@ export const CreateSessionBody = z
   .object({
     mode: z.enum(["DIAGNOSTIC", "EXAM", "CHALLENGE", "PRACTICE", "CONCEPT"]),
     count: z.number().int().min(1).max(60).optional(),
-    difficulty: z.union([z.literal("mixed"), z.literal("hard"), z.coerce.number().int().min(1).max(3)]).optional(),
+    difficulty: z.union([z.literal("mixed"), z.literal("hard"), z.literal("elite"), z.coerce.number().int().min(1).max(4)]).optional(),
     timed: z.boolean().optional(),
     aiWording: z.boolean().optional(),
     reference: z.enum(["integration", "supported"]).optional(),

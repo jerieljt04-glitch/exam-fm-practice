@@ -3,7 +3,10 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { Check } from "lucide-react";
+
 import { Button, Modal } from "@/components/ui";
+import { MOCK_PROFILES, MOCK_PROFILE_ORDER, type MockProfile } from "@/lib/engine/mock-profiles";
 import { cn } from "@/lib/utils";
 
 type Mode = "DIAGNOSTIC" | "EXAM" | "CHALLENGE" | "PRACTICE" | "CONCEPT";
@@ -58,9 +61,10 @@ export function StartPanel({ llm }: { llm: boolean }) {
   const { busy, error, start } = useStarter();
   const [dCount, setDCount] = useState(15);
   const [dLevel, setDLevel] = useState("mixed");
-  const [eLevel, setELevel] = useState("1");
+  const [profile, setProfile] = useState<MockProfile>("STANDARD");
   const [cCount, setCCount] = useState(10);
   const [cTimed, setCTimed] = useState(false);
+  const [cLevel, setCLevel] = useState<"3" | "4">("3");
   const [ai, setAi] = useState(false);
   const [pCount, setPCount] = useState(10);
   const [pRef, setPRef] = useState<"integration" | "supported">("integration");
@@ -75,7 +79,49 @@ export function StartPanel({ llm }: { llm: boolean }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="panel flex flex-col p-4 lg:col-span-2" data-testid="mock-launcher">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-xl">
+              <div className="eyebrow">Mode B · Mock exam</div>
+              <h3 className="text-lg font-semibold">Exam simulation</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                30 questions, 150 minutes, five options, weighted 3 / 7 / 6 / 6 / 8 across the syllabus. No feedback until you submit. Each new mock serves questions you have not seen first; a template that returns comes back as a different case.
+              </p>
+            </div>
+            <Button className="shrink-0" onClick={() => go("EXAM", { difficulty: MOCK_PROFILES[profile].difficulty })} disabled={busy !== null}>
+              {busy === "EXAM" ? "Generating and validating…" : `Start ${MOCK_PROFILES[profile].label.toLowerCase()} mock`}
+            </Button>
+          </div>
+          <div role="radiogroup" aria-label="Mock difficulty" className="mt-4 inline-flex w-full max-w-2xl overflow-hidden rounded-pill border">
+            {MOCK_PROFILE_ORDER.map((id, k) => {
+              const p = MOCK_PROFILES[id];
+              const on = profile === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setProfile(id)}
+                  className={cn(
+                    "flex h-10 flex-1 items-center justify-center gap-1.5 px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    k > 0 && "border-l",
+                    on ? "bg-primary-container text-primary-on-container" : "hover:bg-primary/[0.08]"
+                  )}
+                >
+                  {on && <Check size={16} aria-hidden />}
+                  <span>{p.label}</span>
+                  <span className={cn("hidden text-xs font-normal sm:inline", on ? "" : "text-muted-foreground")}>{p.target}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground" aria-live="polite">
+            {MOCK_PROFILES[profile].summary}
+          </p>
+        </div>
+
         <div className="panel flex flex-col p-4">
           <div className="eyebrow">Mode A</div>
           <h3 className="text-lg font-semibold">Diagnostic</h3>
@@ -98,6 +144,7 @@ export function StartPanel({ llm }: { llm: boolean }) {
                 <option value="1">SOA standard</option>
                 <option value="2">Advanced</option>
                 <option value="3">Challenge</option>
+                <option value="4">Elite</option>
               </select>
             </label>
           </div>
@@ -107,33 +154,10 @@ export function StartPanel({ llm }: { llm: boolean }) {
         </div>
 
         <div className="panel flex flex-col p-4">
-          <div className="eyebrow">Mode B</div>
-          <h3 className="text-lg font-semibold">Exam simulation</h3>
-          <p className="mt-1 flex-1 text-sm text-muted-foreground">
-            30 questions, 150 minutes, five options, weighted 3 / 7 / 6 / 6 / 8 across the syllabus, with about a quarter of the items conceptual, symbolic, statement-based or multi-valued. No feedback until you submit.
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <label className="flex items-center gap-1">
-              Difficulty
-              <select className={select} value={eLevel} onChange={(e) => setELevel(e.target.value)}>
-                <option value="1">SOA standard</option>
-                <option value="mixed">Mixed</option>
-                <option value="2">Advanced</option>
-                <option value="hard">Hard mix (Advanced + Challenge)</option>
-                <option value="3">Challenge</option>
-              </select>
-            </label>
-          </div>
-          <Button className="mt-3" onClick={() => go("EXAM", { difficulty: eLevel })} disabled={busy !== null}>
-            {busy === "EXAM" ? "Generating and validating…" : "Start exam simulation"}
-          </Button>
-        </div>
-
-        <div className="panel flex flex-col p-4">
           <div className="eyebrow">Above exam level</div>
           <h3 className="text-lg font-semibold">Challenge</h3>
           <p className="mt-1 flex-1 text-sm text-muted-foreground">
-            Harder-than-exam reasoning inside the syllabus: hidden structure, chained concepts, equations built from scratch. Every question is Challenge level — never padded with easier ones. Scored separately.
+            Harder-than-exam reasoning inside the syllabus: hidden structure, chained concepts, equations built from scratch. Every question is at the level chosen (Challenge, or Elite with four to six chained stages) — never padded with easier ones. Scored separately.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <label className="flex items-center gap-1">
@@ -147,8 +171,15 @@ export function StartPanel({ llm }: { llm: boolean }) {
             <label className="flex items-center gap-1.5">
               <input type="checkbox" checked={cTimed} onChange={(e) => setCTimed(e.target.checked)} /> 5 min per question
             </label>
+            <label className="flex items-center gap-1">
+              Level
+              <select className={select} value={cLevel} onChange={(e) => setCLevel(e.target.value as "3" | "4")}>
+                <option value="3">Challenge</option>
+                <option value="4">Elite</option>
+              </select>
+            </label>
           </div>
-          <Button className="mt-3" onClick={() => go("CHALLENGE", { count: cCount, difficulty: 3, timed: cTimed })} disabled={busy !== null}>
+          <Button className="mt-3" onClick={() => go("CHALLENGE", { count: cCount, difficulty: Number(cLevel), timed: cTimed })} disabled={busy !== null}>
             {busy === "CHALLENGE" ? "Generating and validating…" : "Start challenge"}
           </Button>
         </div>

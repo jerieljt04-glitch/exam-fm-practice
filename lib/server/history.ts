@@ -98,6 +98,12 @@ export async function attemptsForSession(id: string): Promise<AttemptRecord[]> {
 }
 
 /** Questions of the most recently created sessions (any status), oldest session first. */
+/** How many sessions have served each template, over the whole history (submitted or not). */
+export async function servedTemplateCounts(): Promise<Map<string, number>> {
+  const rows = await prisma.sessionQuestion.groupBy({ by: ["templateId"], _count: { sessionId: true } });
+  return new Map(rows.map((r) => [r.templateId, r._count.sessionId]));
+}
+
 export async function recentlyServed(sessions: number): Promise<Array<{ sessionId: string; instance: QuestionInstance }>> {
   const rows = await prisma.session.findMany({
     orderBy: { createdAt: "desc" },

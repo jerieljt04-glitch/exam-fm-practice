@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator as CalcIcon, ChevronLeft, ChevronRight, Flag, Keyboard, NotebookPen, Sigma } from "lucide-react";
+import { Calculator as CalcIcon, ChevronLeft, ChevronRight, Flag, Keyboard, NotebookPen, Sigma, Strikethrough, Timer } from "lucide-react";
 
 import { Exhibits } from "@/components/answers/Exhibits";
 import { OptionContentView, statementCountOf } from "@/components/answers/OptionContentView";
@@ -26,12 +26,16 @@ type SidePane = "working" | "calculator" | "formulas";
 type Question = SessionView["questions"][number];
 
 const AUTOSAVE_MS = 8000;
+/** Exam pace: 150 minutes over 30 questions. Past 7 minutes a question is a time sink. */
+const PACE_SECONDS = 300;
+const SINK_SECONDS = 420;
 
 const SHORTCUTS: Array<[string, string]> = [
   ["A – E", "Choose an answer (press again to clear)"],
   ["← / →", "Previous / next question"],
   ["F", "Flag or unflag for review"],
   ["1 – 5", "Confidence, very low to very high"],
+  ["Right-click", "Strike out an option (again to restore)"],
   ["?", "Show these shortcuts"],
 ];
 
@@ -78,6 +82,37 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
   const current = questions[index];
   const remaining = remainingSeconds(initial.durationSeconds, elapsed);
 
+  // Seconds spent on each question so far (stored time plus this visit), for the pacing pill.
+  const questionSeconds = useRef(new Map<string, number>());
+  const secondsOn = (q: Question) => questionSeconds.current.get(q.instanceId) ?? q.response.timeSpentSeconds ?? 0;
+
+  // Options struck out by the candidate (elimination aid only; never saved as an answer).
+  const struckKey = `struck:${initial.id}`;
+  const [struck, setStruck] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(struckKey);
+      if (saved) setStruck(JSON.parse(saved) as Record<string, string[]>);
+    } catch {
+      // Storage unavailable: elimination still works for this page view.
+    }
+  }, [struckKey]);
+  const toggleStrike = useCallback(
+    (instanceId: string, key: string) => {
+      setStruck((prev) => {
+        const list = prev[instanceId] ?? [];
+        const next = { ...prev, [instanceId]: list.includes(key) ? list.filter((k) => k !== key) : [...list, key] };
+        try {
+          sessionStorage.setItem(struckKey, JSON.stringify(next));
+        } catch {
+          // Ignore storage failures.
+        }
+        return next;
+      });
+    },
+    [struckKey]
+  );
+
   const buildPayload = useCallback(() => {
     const ids = new Set([...pending.current.keys(), ...pendingSeconds.current.keys()]);
     const answers = [...ids].map((instanceId) => ({ instanceId, ...pending.current.get(instanceId), addSeconds: pendingSeconds.current.get(instanceId) ?? 0 }));
@@ -118,8 +153,12 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
       const visible = document.visibilityState === "visible";
       if (initial.timed) setElapsed(Math.floor((Date.now() - clockStart.current) / 1000));
       else if (visible) setElapsed((e) => e + 1);
-      const qid = questions[indexRef.current]?.instanceId;
-      if (visible && qid) pendingSeconds.current.set(qid, (pendingSeconds.current.get(qid) ?? 0) + 1);
+      const q = questions[indexRef.current];
+      const qid = q?.instanceId;
+      if (visible && qid) {
+        pendingSeconds.current.set(qid, (pendingSeconds.current.get(qid) ?? 0) + 1);
+        questionSeconds.current.set(qid, (questionSeconds.current.get(qid) ?? q.response.timeSpentSeconds ?? 0) + 1);
+      }
     }, 1000);
     return () => clearInterval(id);
   }, [questions, initial.timed]);
@@ -267,7 +306,7 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
           {initial.notice}
         </p>
       )}
-      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-pill bg-secondary" role="progressbar" aria-label="Questions answered" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={questions.length}>
+      <div className="mb-4 h-[3px] w-full overflow-hidden rounded-pill bg-secondary" role="progressbar" aria-label="Questions answered" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={questions.length}>
         <div className="google-bar h-full rounded-pill transition-[width] duration-slow ease-emphasized" style={{ width: `${(100 * answered) / questions.length}%`, backgroundSize: `${questions.length ? (100 * questions.length) / Math.max(1, answered) : 100}% 100%` }} />
       </div>
 
@@ -292,6 +331,9 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           <section className="panel p-6 sm:p-7" aria-label={`Question ${index + 1}`}>
+            <div className="mb-3 flex justify-end">
+              <PacePill seconds={secondsOn(current)} />
+            </div>
             <MathRenderer key={current.instanceId} content={current.stem} className="text-[15px]" />
             <Exhibits key={`exhibits-${current.instanceId}`} exhibits={current.exhibits} className="mt-4" />
             <fieldset className="mt-5 space-y-2">
@@ -299,20 +341,48 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
               {current.options.map((option) => {
                 const selected = current.response.selectedKey === option.key;
                 const rich = option.content !== undefined && option.content.type !== "numeric";
+                const isStruck = (struck[current.instanceId] ?? []).includes(option.key);
                 return (
                   <label
                     key={option.key}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      toggleStrike(current.instanceId, option.key);
+                    }}
                     className={cn(
-                      "flex min-w-0 cursor-pointer gap-3 rounded-lg border px-4 py-3 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ring-offset-background",
+                      "group flex min-w-0 cursor-pointer gap-3 rounded-lg border px-4 py-3 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 ring-offset-background",
                       rich ? "items-start" : "items-center",
-                      selected ? "border-primary bg-primary-container" : "bg-elevated hover:border-primary/40 hover:shadow-resting"
+                      selected ? "border-primary bg-primary-container" : "bg-elevated hover:border-primary/40 hover:shadow-resting",
+                      isStruck && !selected && "bg-transparent"
                     )}
                   >
                     <input type="radio" name={`answer-${current.instanceId}`} className="sr-only" checked={selected} aria-label={`Option ${option.key}: ${option.display}`} onChange={() => update({ selectedKey: option.key })} />
                     <span aria-hidden className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-sm font-semibold", selected && "border-primary bg-primary text-primary-foreground")}>
                       {option.key}
                     </span>
-                    <OptionContentView content={option.content} display={option.display} statementCount={statementCountOf(current.exhibits)} className={cn("flex-1", rich && "pt-0.5")} />
+                    <OptionContentView
+                      content={option.content}
+                      display={option.display}
+                      statementCount={statementCountOf(current.exhibits)}
+                      className={cn("flex-1", rich && "pt-0.5", isStruck && "text-muted-foreground line-through decoration-muted-foreground decoration-2 opacity-60")}
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleStrike(current.instanceId, option.key);
+                      }}
+                      className={cn(
+                        "inline-flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-pill text-muted-foreground hover:bg-primary/[0.08] focus-visible:opacity-100",
+                        isStruck ? "opacity-100 text-foreground" : "opacity-40 group-hover:opacity-100"
+                      )}
+                      aria-pressed={isStruck}
+                      aria-label={isStruck ? `Restore option ${option.key}` : `Strike out option ${option.key}`}
+                      title={isStruck ? "Restore option" : "Strike out option (or right-click)"}
+                    >
+                      <Strikethrough size={16} strokeWidth={1.75} aria-hidden />
+                    </button>
                   </label>
                 );
               })}
@@ -446,5 +516,16 @@ export function SessionRunner({ initial }: { initial: SessionView }) {
         <p className="mt-3">Shortcuts pause while you type in the working pad, the calculator or a field.</p>
       </Modal>
     </div>
+  );
+}
+
+/** Time on the current question against the five-minute exam pace. */
+function PacePill({ seconds }: { seconds: number }) {
+  const tone = seconds > SINK_SECONDS ? "border-destructive/40 bg-destructive-container text-destructive" : seconds > PACE_SECONDS ? "border-warning/40 bg-warning-container text-warning" : "text-muted-foreground";
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-pill border px-3 py-1 text-xs tabular-nums", tone)} aria-label={`Time on this question ${formatClock(seconds)}, target 5:00`} title="Time on this question (target 5:00)">
+      <Timer size={14} strokeWidth={1.75} aria-hidden />
+      {formatClock(seconds)} / 5:00
+    </span>
   );
 }

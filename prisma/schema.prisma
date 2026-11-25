@@ -13,7 +13,7 @@ model Session {
   id              String            @id
   mode            String // DIAGNOSTIC | EXAM | CHALLENGE | PRACTICE | CONCEPT | REMEDIATION | TRANSFER
   status          String // ACTIVE | SUBMITTED
-  difficulty      String // "1" | "2" | "3" | "mixed"
+  difficulty      String // "1" | "2" | "3" | "4" | "mixed" | "hard" | "elite"
   timed           Boolean
   durationSeconds Int?
   elapsedSeconds  Int               @default(0)

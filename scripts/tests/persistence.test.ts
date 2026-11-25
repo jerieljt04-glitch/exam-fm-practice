@@ -65,6 +65,23 @@ test("sessions persist: create, autosave, restore, submit, report, history", asy
   expect((await repo.attemptHistory()).length === 0 && (await repo.loadRemediationItems()).length === 0, "history reset");
 });
 
+test("Elite mocks persist with their profile; missed hard questions start a targeted Challenge/Elite drill", async () => {
+  const repo = await import("../../lib/server/repository");
+  const { mockProfileOf } = await import("../../lib/engine/mock-profiles");
+  const id = await repo.createSession({ mode: "EXAM", count: 5, difficulty: "elite" });
+  await repo.submitSession(id);
+  const report = await repo.getReport(id);
+  expect(report !== null && mockProfileOf(report.session.difficulty) === "ELITE_9", "the report knows the Elite profile");
+  expect(report!.byDifficulty.some((d) => d.level === 4 && d.total > 0), "Elite questions are reported at level 4");
+  expect(report!.hardMissed === 5, `all unanswered Elite questions count as missed (${report!.hardMissed})`);
+  const drill = await repo.createHardDrill(id);
+  const { prisma } = await import("../../lib/server/db");
+  const rows = await prisma.sessionQuestion.findMany({ where: { sessionId: drill }, select: { templateId: true, difficulty: true } });
+  expect(rows.length >= 6, `the drill has ${rows.length} questions`);
+  expect(rows.every((q) => q.difficulty >= 3), "the drill is Challenge or Elite only");
+  expect(rows.every((q) => !report!.questions.some((r) => r.instance.templateId === q.templateId)), "the drill avoids the templates already seen");
+});
+
 test("study conditions: practice sessions keep their reference mode; diagnostics are always closed book", async () => {
   const repo = await import("../../lib/server/repository");
   const supported = await repo.createSession({ mode: "PRACTICE", count: 5, reference: "supported" });
